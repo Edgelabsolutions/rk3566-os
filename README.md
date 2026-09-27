@@ -1,74 +1,74 @@
 # Kray-SoM-RKC OS
 
-Armbian (Debian 13 trixie, CLI) для плати **Kray-SoM-RKC** на Rockchip RK3566.
+Armbian (Debian 13 trixie, CLI) for the **Kray-SoM-RKC** board based on the Rockchip RK3566.
 
-Плата зроблена на основі дизайну EmbedFire LubanCat Zero N: RK3566, PMIC RK809 + TCS4525, GbE (RGMII), HDMI, USB 2.0, microSD, опціональна eMMC. Підтримки цієї плати немає ні в Armbian, ні в mainline Linux чи U-Boot. Цей репозиторій додає її через `userpatches` до офіційного [armbian/build](https://github.com/armbian/build).
+The board is derived from the EmbedFire LubanCat Zero N design: RK3566, RK809 + TCS4525 PMIC, GbE (RGMII), HDMI, USB 2.0, microSD and optional eMMC. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
 
-## Стан
+## Status
 
-| Компонент | Стан |
+| Component | Status |
 |---|---|
-| DDR 4 ГБ LPDDR4X, U-Boot, PMIC RK809 | ✅ |
-| microSD (High Speed, 50 МГц) | ✅ |
-| Ethernet 1 Гбіт/с | ✅ |
-| USB 2.0 хост (хаби, RTL8153, RTL8821AU) | ✅ |
-| HDMI (відео) | ✅ |
-| NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 мс/кадр |
-| GPU (panfrost), VPU/MPP, RGA | ✅ драйвери завантажуються |
-| eMMC | ❔ перевірити на платі з eMMC (HS200) |
-| USB-C OTG | ❔ не перевірено |
+| 4 GB LPDDR4X, U-Boot, RK809 PMIC | ✅ |
+| microSD (High Speed, 50 MHz) | ✅ |
+| Ethernet 1 Gbps | ✅ |
+| USB 2.0 host (hubs, RTL8153, RTL8821AU) | ✅ |
+| HDMI (video) | ✅ |
+| NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame |
+| GPU (panfrost), VPU/MPP, RGA | ✅ drivers probe |
+| eMMC | ❔ to be verified on a board with eMMC (HS200) |
+| USB-C OTG | ❔ not tested |
 
-Основна гілка ядра — **vendor 6.1** (Rockchip BSP). У mainline немає драйвера NPU для RK3566, тому mainline DTS (`current` 6.18, `edge` 7.0) лежить тут лише для експериментів.
+The supported kernel branch is **vendor 6.1** (Rockchip BSP). Mainline has no NPU driver for the RK3566, so the mainline DTS (`current` 6.18, `edge` 7.0) is kept for experiments only.
 
-## Збірка
+## Building
 
-Потрібен x86_64 хост на Debian або Ubuntu, ~80 ГБ вільного місця і `aarch64-linux-gnu-gcc` з `libc6-dev-arm64-cross` (для тесту NPU).
+Requires an x86_64 Debian or Ubuntu host with ~80 GB of free space, plus `aarch64-linux-gnu-gcc` and `libc6-dev-arm64-cross` (for the NPU test).
 
 ```bash
 ./build.sh
 ```
 
-Скрипт:
-1. клонує `armbian/build` на тегу `v26.5.1` у `armbian-build/`;
-2. завантажує RKNN runtime, заголовки й тестову модель з [airockchip/rknn-toolkit2](https://github.com/airockchip/rknn-toolkit2) `v2.3.2` (`scripts/fetch-npu.sh`) і компілює тест NPU;
-3. копіює `userpatches/` в `armbian-build/` і запускає `compile.sh`.
+The script:
+1. clones `armbian/build` at tag `v26.5.1` into `armbian-build/`;
+2. downloads the RKNN runtime, headers and test model from [airockchip/rknn-toolkit2](https://github.com/airockchip/rknn-toolkit2) `v2.3.2` (`scripts/fetch-npu.sh`) and builds the NPU test;
+3. copies `userpatches/` into `armbian-build/` and runs `compile.sh`.
 
-Образ з'явиться в `armbian-build/output/images/`. Додаткові параметри Armbian передаються як є, наприклад `./build.sh BRANCH=current`.
+The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through, e.g. `./build.sh BRANCH=current`.
 
-Файли RKNN SDK поширюються під ліцензією Rockchip, тому в репозиторій вони не входять і завантажуються під час збірки.
+The RKNN SDK files are distributed under the Rockchip license, so they are not stored in this repository and are downloaded at build time.
 
-## Прошивка і перший запуск
+## Flashing and first boot
 
 ```bash
 xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
-- Консоль: UART2, **1500000 8N1**. Там ядро, аварійний shell initramfs і вхід у систему. Вхід також є на HDMI (tty1).
-- Перевірка NPU:
+- Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
+- NPU check:
   ```bash
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
-  Очікується: собака → клас 156 (~0.93), кіт → класи 278–286, ~4.5 мс/кадр.
-- Перенесення на eMMC (на платах, де вона є): `armbian-install`.
+  Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame.
+- Moving the system to eMMC (on boards that have it): `armbian-install`.
 
-## Структура
+## Layout
 
 ```
-build.sh                                   збірка образу
-scripts/fetch-npu.sh                       RKNN SDK + тест NPU
+build.sh                                   image build
+scripts/fetch-npu.sh                       RKNN SDK + NPU test
 userpatches/
-  config/boards/kray-som-rkc.csc           конфіг плати Armbian
-  kernel/rk35xx-vendor-6.1/dt/             DTS для vendor-ядра (основний)
-  kernel/archive/rockchip64-{6.18,7.0}/dt/ DTS для mainline (експериментальний)
-  u-boot/v2025.10/                         плата kray-som-rkc-rk3566 для mainline U-Boot
-  npu/npu-test/                            тест NPU (npu_test.c, run.sh)
+  config/boards/kray-som-rkc.csc           Armbian board config
+  kernel/rk35xx-vendor-6.1/dt/             vendor kernel DTS (supported)
+  kernel/archive/rockchip64-{6.18,7.0}/dt/ mainline DTS (experimental)
+  u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
+  npu/npu-test/                            NPU test (npu_test.c, run.sh)
 ```
 
-## Технічні нотатки
+## Technical notes
 
-- **U-Boot.** Mainline U-Boot 2025.10 з власною платою (`kray-som-rkc-rk3566_defconfig`), у DTS якої описано RK809. U-Boot вмикає регулятори з `regulator-boot-on`, зокрема `vdd_npu`. Без цього vendor-ядро падає з `panic_on_set_idle` під час ініціалізації домену живлення NPU.
+- **U-Boot.** Mainline U-Boot 2025.10 with its own board (`kray-som-rkc-rk3566_defconfig`) whose DTS describes the RK809. U-Boot enables the `regulator-boot-on` rails, `vdd_npu` among them. Without that the vendor kernel panics with `panic_on_set_idle` while powering up the NPU power domain.
 - **DDR.** `rk3566_ddr_1056MHz_v1.21.bin`, BL31 `rk3568_bl31_v1.44.elf`.
-- **microSD.** `sd-uhs-sdr104` вимкнено: калібрування SDR104 не проходить (`All phases bad`), тому картка працює в High Speed.
-- **Консоль.** У vendor DTS FIQ debugger вимкнено, а UART2 віддано драйверу 8250 (`ttyS2`), щоб консоль приймала введення.
-- **Ethernet PHY** (JLSemi JL2101 або RTL8211F, залежно від ревізії) працює через Generic PHY із затримками RGMII `tx_delay=0x24`, `rx_delay=0x08`.
-- **Джерела DTS:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` з [LubanCat/kernel](https://github.com/LubanCat/kernel) і upstream `rk3566-lubancat-1.dts`.
+- **microSD.** `sd-uhs-sdr104` is disabled: SDR104 tuning fails (`All phases bad`), so the card runs in High Speed mode.
+- **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
+- **Ethernet PHY** (JLSemi JL2101 or RTL8211F depending on revision) runs on the Generic PHY driver with RGMII delays `tx_delay=0x24`, `rx_delay=0x08`.
+- **DTS sources:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` from [LubanCat/kernel](https://github.com/LubanCat/kernel) and upstream `rk3566-lubancat-1.dts`.
