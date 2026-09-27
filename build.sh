@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Build the Kray-SoM-RKC Armbian image.
+#
+#   ./build.sh                 # vendor 6.1 kernel (default, NPU supported)
+#   ./build.sh BRANCH=current  # mainline 6.18, no NPU (experimental)
+#
+# Extra KEY=VALUE arguments are passed through to Armbian's compile.sh.
+set -euo pipefail
+
+ARMBIAN_TAG="${ARMBIAN_TAG:-v26.5.1}"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+ARMBIAN="${ROOT}/armbian-build"
+
+if [[ ! -d "${ARMBIAN}/.git" ]]; then
+	echo "==> Cloning armbian/build ${ARMBIAN_TAG}"
+	git -c advice.detachedHead=false clone -q --depth 1 --branch "${ARMBIAN_TAG}" https://github.com/armbian/build "${ARMBIAN}"
+fi
+
+"${ROOT}/scripts/fetch-npu.sh"
+
+echo "==> Syncing userpatches into armbian-build"
+mkdir -p "${ARMBIAN}/userpatches"
+cp -a "${ROOT}/userpatches/." "${ARMBIAN}/userpatches/"
+
+cd "${ARMBIAN}"
+exec ./compile.sh build \
+	BOARD=kray-som-rkc \
+	BRANCH=vendor \
+	RELEASE=trixie \
+	BUILD_MINIMAL=no \
+	BUILD_DESKTOP=no \
+	KERNEL_CONFIGURE=no \
+	COMPRESS_OUTPUTIMAGE=sha,img,xz \
+	EXPERT=yes \
+	"$@"

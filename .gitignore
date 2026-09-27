@@ -1,0 +1,9 @@
+# Armbian build framework checkout and its outputs (cloned by build.sh)
+/armbian-build/
+
+# Rockchip RKNN SDK files, downloaded by scripts/fetch-npu.sh (Rockchip license)
+/.cache/
+/userpatches/npu/librknnrt.so
+/userpatches/npu/include/
+/userpatches/npu/npu-test/npu_test
+/userpatches/npu/npu-test/model/
