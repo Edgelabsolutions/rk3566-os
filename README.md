@@ -6,19 +6,26 @@ The board is derived from the EmbedFire LubanCat Zero N design: RK3566, RK809 + 
 
 ## Status
 
-| Component | Status |
-|---|---|
-| 4 GB LPDDR4X, U-Boot, RK809 PMIC | ✅ |
-| microSD (High Speed, 50 MHz) | ✅ |
-| Ethernet 1 Gbps | ✅ |
-| USB 2.0 host (hubs, RTL8153, RTL8821AU) | ✅ |
-| HDMI (video) | ✅ |
-| NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame |
-| GPU (panfrost), VPU/MPP, RGA | ✅ drivers probe |
-| eMMC | ❔ to be verified on a board with eMMC (HS200) |
-| USB-C OTG | ❔ not tested |
+Two kernel branches are supported:
 
-The supported kernel branch is **vendor 6.1** (Rockchip BSP). Mainline has no NPU driver for the RK3566, so the mainline DTS (`current` 6.18, `edge` 7.0) is kept for experiments only.
+- **vendor 6.1** (Rockchip BSP), the default, and the only one with the NPU;
+- **current 6.18** (mainline), for setups that do not need the NPU.
+
+| Component | vendor 6.1 | current 6.18 |
+|---|---|---|
+| 4 GB LPDDR4X, U-Boot, RK809 PMIC | ✅ | ✅ |
+| microSD (High Speed, 50 MHz) | ✅ | ✅ |
+| Ethernet 1 Gbps | ✅ | ✅ |
+| USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
+| USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
+| USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
+| HDMI (video) | ✅ | ✅ |
+| GPU | ✅ panfrost | ✅ panfrost |
+| Video codecs | ✅ MPP (rkvdec/rkvenc/vdpu/vepu) | ✅ hantro (probes) |
+| NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame | ❌ no mainline driver |
+| eMMC | ❔ to be verified on a board with eMMC (HS200) | ❔ |
+
+The mainline DTS for `edge` (7.0) is kept in `userpatches/` but is not enabled or tested.
 
 ## Building
 
@@ -33,7 +40,7 @@ The script:
 2. downloads the RKNN runtime, headers and test model from [airockchip/rknn-toolkit2](https://github.com/airockchip/rknn-toolkit2) `v2.3.2` (`scripts/fetch-npu.sh`) and builds the NPU test;
 3. copies `userpatches/` into `armbian-build/` and runs `compile.sh`.
 
-The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through, e.g. `./build.sh BRANCH=current`.
+The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through; for the mainline kernel run `./build.sh BRANCH=current`.
 
 The RKNN SDK files are distributed under the Rockchip license, so they are not stored in this repository and are downloaded at build time.
 
@@ -44,7 +51,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
 ```
 
 - Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
-- NPU check:
+- NPU check (vendor images only):
   ```bash
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
@@ -70,5 +77,7 @@ userpatches/
 - **DDR.** `rk3566_ddr_1056MHz_v1.21.bin`, BL31 `rk3568_bl31_v1.44.elf`.
 - **microSD.** `sd-uhs-sdr104` is disabled: SDR104 tuning fails (`All phases bad`), so the card runs in High Speed mode.
 - **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
-- **Ethernet PHY** (JLSemi JL2101 or RTL8211F depending on revision) runs on the Generic PHY driver with RGMII delays `tx_delay=0x24`, `rx_delay=0x08`.
+- **Ethernet PHY** (JLSemi JL2101 or RTL8211F depending on revision) runs on the Generic PHY driver with RGMII delays `tx_delay=0x24`, `rx_delay=0x08` on both kernels.
+- **Mainline WiFi.** Armbian's mainline config leaves `RTW88_8821AU` off; the board config enables it as a module for non-vendor branches.
+- **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end1` on vendor and `end0` on mainline. The root filesystem is mounted by UUID, so this does not affect booting.
 - **DTS sources:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` from [LubanCat/kernel](https://github.com/LubanCat/kernel) and upstream `rk3566-lubancat-1.dts`.
