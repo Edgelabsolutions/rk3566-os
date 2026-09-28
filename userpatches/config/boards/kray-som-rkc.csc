@@ -61,3 +61,10 @@ function post_customize_image__kray_som_rkc_npu_runtime() {
 	cp -r "${src}/npu-test" "${SDCARD}/usr/share/kray-som-rkc/"
 	chroot_sdcard ldconfig
 }
+
+# Mainline: in-kernel driver for RTL8821AU USB WiFi adapters (e.g. TP-Link
+# Archer T2U Plus). The vendor kernel already ships the out-of-tree 88XXau.
+function custom_kernel_config__kray_som_rkc_rtw88_8821au() {
+	[[ "${BRANCH}" == "vendor" ]] && return 0
+	opts_m+=("RTW88_8821AU")
+}
