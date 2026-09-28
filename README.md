@@ -58,6 +58,14 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame.
 - Moving the system to eMMC (on boards that have it): `armbian-install`.
 
+### System updates
+
+`apt upgrade` and `armbian-upgrade` are safe to use, with one exception: the kernel and DTB packages (`linux-image-<branch>-<family>`, `linux-dtb-<branch>-<family>`) are marked **hold** in the image. The official Armbian repository ships packages with the same names that do not contain `rk3566-kray-som-rkc.dtb` or this board's kernel options, so installing them would leave the board unbootable. Update the kernel by flashing a new release or by installing the `.deb` packages built from this repository.
+
+Do not switch kernels with `armbian-config` for the same reason, and do not install `linux-headers-*` from the Armbian repository: use the `linux-headers-*.deb` that `./build.sh` leaves in `armbian-build/output/debs/`, so they match the running kernel.
+
+To see the held packages: `apt-mark showhold`.
+
 ## Layout
 
 ```
