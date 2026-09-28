@@ -5,9 +5,9 @@ BOARDFAMILY="rk35xx"
 BOARD_MAINTAINER=""
 INTRODUCED="2023"
 BOOTCONFIG="generic-rk3568_defconfig"
-# vendor (Rockchip BSP 6.1) is the supported branch: mainline has no RK3566 NPU driver.
-# Mainline DTS is kept in userpatches/kernel/archive/ for current/edge experiments.
-KERNEL_TARGET="vendor"
+# vendor (Rockchip BSP 6.1) is the default branch and the only one with the NPU.
+# current (mainline 6.18) is for setups that do not need the NPU.
+KERNEL_TARGET="vendor,current"
 KERNEL_TEST_TARGET="vendor"
 FULL_DESKTOP="yes"
 BOOT_LOGO="desktop"
@@ -48,8 +48,10 @@ function post_customize_image__kray_som_rkc_serial_console() {
 }
 
 # RKNN runtime (librknnrt 2.3.2, matches the vendor kernel's rknpu 0.9.8) and a
-# MobileNet smoke test in /usr/share/kray-som-rkc/npu-test.
+# MobileNet smoke test in /usr/share/kray-som-rkc/npu-test. Vendor only: mainline
+# has no driver for the RK3566 NPU.
 function post_customize_image__kray_som_rkc_npu_runtime() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
 	display_alert "$BOARD" "Installing RKNN runtime 2.3.2 and NPU test" "info"
 	local src="${USERPATCHES_PATH}/npu"
 	install -D -m 0644 "${src}/librknnrt.so" "${SDCARD}/usr/lib/librknnrt.so"
@@ -58,4 +60,11 @@ function post_customize_image__kray_som_rkc_npu_runtime() {
 	install -d "${SDCARD}/usr/share/kray-som-rkc"
 	cp -r "${src}/npu-test" "${SDCARD}/usr/share/kray-som-rkc/"
 	chroot_sdcard ldconfig
+}
+
+# Mainline: in-kernel driver for RTL8821AU USB WiFi adapters (e.g. TP-Link
+# Archer T2U Plus). The vendor kernel already ships the out-of-tree 88XXau.
+function custom_kernel_config__kray_som_rkc_rtw88_8821au() {
+	[[ "${BRANCH}" == "vendor" ]] && return 0
+	opts_m+=("RTW88_8821AU")
 }
