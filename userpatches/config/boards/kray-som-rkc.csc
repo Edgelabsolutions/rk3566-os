@@ -68,3 +68,13 @@ function custom_kernel_config__kray_som_rkc_rtw88_8821au() {
 	[[ "${BRANCH}" == "vendor" ]] && return 0
 	opts_m+=("RTW88_8821AU")
 }
+
+# The kernel and DTB packages carry this board's DTS and kernel options, but the
+# official Armbian apt repository ships packages with the same names without
+# them: an upgrade would drop rk3566-kray-som-rkc.dtb and leave the board
+# unbootable. Hold them so `apt upgrade` / `armbian-upgrade` skip them.
+function post_customize_image__kray_som_rkc_hold_kernel() {
+	local pkgs=("linux-image-${BRANCH}-${LINUXFAMILY}" "linux-dtb-${BRANCH}-${LINUXFAMILY}")
+	display_alert "$BOARD" "Holding ${pkgs[*]}" "info"
+	chroot_sdcard apt-mark hold "${pkgs[@]}"
+}
