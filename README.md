@@ -8,7 +8,7 @@ The board is derived from the EmbedFire LubanCat Zero N design: RK3566, RK809 + 
 
 Two kernel branches are supported:
 
-- **vendor 6.1** (Rockchip BSP), the default, and the only one with the NPU;
+- **vendor 6.1** (Rockchip BSP, SDK release rkr7.2, 6.1.172), the default, and the only one with the NPU;
 - **current 6.18** (mainline), for setups that do not need the NPU.
 
 | Component | vendor 6.1 | current 6.18 |
@@ -104,6 +104,7 @@ scripts/fetch-npu.sh                       RKNN SDK + NPU test
 scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
+  config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
   kernel/rk35xx-vendor-6.1/dt/             vendor kernel DTS (supported)
   kernel/archive/rockchip64-{6.18,7.0}/dt/ mainline DTS (experimental)
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
@@ -117,6 +118,7 @@ userpatches/
 - **microSD.** `sd-uhs-sdr104` is disabled: SDR104 tuning fails (`All phases bad`), so the card runs in High Speed mode.
 - **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
 - **Ethernet PHY** (JLSemi JL2101 or RTL8211F depending on revision) runs on the Generic PHY driver with RGMII delays `tx_delay=0x24`, `rx_delay=0x08` on both kernels.
+- **Vendor kernel rkr7.2.** Armbian v26.5.1 builds the vendor branch from `rk-6.1-rkr5.1` (6.1.115); the board config switches it to `rk-6.1-rkr7.2` (6.1.172) as Armbian main does, with Armbian main's kernel config. The EasePi A2/R2 DTS files in `kernel/rk35xx-vendor-6.1/dt/` are the kernel tree's own versions and override Armbian's copies, which do not compile against rkr7.2; the Unisoc uwe5622 WiFi driver is skipped because it fails to link. These workarounds can go once the build moves to an Armbian release that ships rkr7.2.
 - **Mainline WiFi.** Armbian's mainline config leaves `RTW88_8821AU` off; the board config enables it as a module for non-vendor branches.
 - **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end1` on vendor and `end0` on mainline. The root filesystem is mounted by UUID, so this does not affect booting.
 - **DTS sources:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` from [LubanCat/kernel](https://github.com/LubanCat/kernel) and upstream `rk3566-lubancat-1.dts`.
