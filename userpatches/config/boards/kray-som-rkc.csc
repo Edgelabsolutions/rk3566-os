@@ -40,6 +40,18 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 	}
 }
 
+# Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
+# as in Armbian main (armbian/build 81e8624). The matching kernel config is in
+# userpatches/config/kernel/linux-rk35xx-vendor.config. The Unisoc uwe5622 WiFi
+# driver that Armbian v26.5.1 injects does not link against rkr7.2 (the board
+# has no such chip), so it is skipped.
+function post_family_config__kray_som_rkc_vendor_rkr72() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	display_alert "$BOARD" "Using vendor kernel branch rk-6.1-rkr7.2" "info"
+	declare -g KERNELBRANCH="branch:rk-6.1-rkr7.2"
+	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622)
+}
+
 # Serial-only console: kernel log, initramfs rescue shell and login on UART2
 # (1500000 8N1). HDMI still gets a login prompt on tty1.
 function post_customize_image__kray_som_rkc_serial_console() {
@@ -67,6 +79,13 @@ function post_customize_image__kray_som_rkc_npu_runtime() {
 function custom_kernel_config__kray_som_rkc_rtw88_8821au() {
 	[[ "${BRANCH}" == "vendor" ]] && return 0
 	opts_m+=("RTW88_8821AU")
+}
+
+# The Ethernet LEDs are driven by the PHY itself, not by LED triggers. With
+# LED_TRIGGER_PHY on, every link-up logs "No phy led trigger registered for
+# speed(-1)" at alert level on the console.
+function custom_kernel_config__kray_som_rkc_no_phy_led_trigger() {
+	opts_n+=("LED_TRIGGER_PHY")
 }
 
 # The kernel and DTB packages carry this board's DTS and kernel options, but the
