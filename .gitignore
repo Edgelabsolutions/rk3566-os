@@ -7,3 +7,6 @@
 /userpatches/npu/include/
 /userpatches/npu/npu-test/npu_test
 /userpatches/npu/npu-test/model/
+
+# Rockchip multimedia packages and their build tree (scripts/build-multimedia.sh)
+/userpatches/multimedia/
