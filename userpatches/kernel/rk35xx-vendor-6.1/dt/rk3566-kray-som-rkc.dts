@@ -117,6 +117,10 @@
 	cpu-supply = <&vdd_cpu>;
 };
 
+&crypto {
+	status = "okay";
+};
+
 &dfi {
 	status = "okay";
 };
@@ -557,6 +561,16 @@
 	vccio5-supply = <&vcc_3v3>;
 	vccio6-supply = <&vcc_1v8>;
 	vccio7-supply = <&vcc_3v3>;
+};
+
+/*
+ * rk3568-linux.dtsi enables the TRNG, but on RK3566 it fails rngtest
+ * (962 of 1000 FIPS 140-2 blocks) and the vendor driver credits it with
+ * quality 999, so the kernel would count biased data as entropy.
+ * Mainline keeps it disabled on RK3566 for the same reason.
+ */
+&rng {
+	status = "disabled";
 };
 
 &rockchip_suspend {
