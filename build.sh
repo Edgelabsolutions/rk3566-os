@@ -18,6 +18,12 @@ fi
 
 "${ROOT}/scripts/fetch-npu.sh"
 
+# Rockchip MPP / RGA / FFmpeg / GStreamer packages for vendor images. Built once
+# and reused; delete userpatches/multimedia/*.deb to rebuild them.
+if ! compgen -G "${ROOT}/userpatches/multimedia/*.deb" > /dev/null; then
+	"${ROOT}/scripts/build-multimedia.sh"
+fi
+
 echo "==> Syncing userpatches into armbian-build"
 mkdir -p "${ARMBIAN}/userpatches"
 cp -a "${ROOT}/userpatches/." "${ARMBIAN}/userpatches/"

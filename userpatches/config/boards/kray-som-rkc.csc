@@ -78,3 +78,31 @@ function post_customize_image__kray_som_rkc_hold_kernel() {
 	display_alert "$BOARD" "Holding ${pkgs[*]}" "info"
 	chroot_sdcard apt-mark hold "${pkgs[@]}"
 }
+
+# Hardware video codecs.
+#  vendor:  Rockchip MPP stack built by scripts/build-multimedia.sh
+#           (userpatches/multimedia/*.deb) plus the GStreamer runtime it needs.
+#  current: mainline V4L2 stateless decoders (hantro, rkvdec) through
+#           GStreamer v4l2codecs from Debian, plus v4l-utils.
+function post_family_config__kray_som_rkc_multimedia_packages() {
+	add_packages_to_image gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+	case "${BRANCH}" in
+		vendor) add_packages_to_image libdrm2 ;;
+		current) add_packages_to_image gstreamer1.0-plugins-bad v4l-utils ;;
+	esac
+}
+
+function post_customize_image__kray_som_rkc_multimedia() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/multimedia"
+	if ! compgen -G "${src}/*.deb" > /dev/null; then
+		display_alert "$BOARD" "No multimedia packages in ${src}; run scripts/build-multimedia.sh" "wrn"
+		return 0
+	fi
+	display_alert "$BOARD" "Installing Rockchip MPP multimedia packages" "info"
+	mkdir -p "${SDCARD}/tmp/kray-multimedia"
+	cp "${src}"/*.deb "${SDCARD}/tmp/kray-multimedia/"
+	chroot_sdcard dpkg -i /tmp/kray-multimedia/*.deb
+	rm -rf "${SDCARD}/tmp/kray-multimedia"
+	chroot_sdcard ldconfig
+}

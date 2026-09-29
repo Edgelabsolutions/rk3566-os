@@ -21,7 +21,7 @@ Two kernel branches are supported:
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
 | HDMI (video) | ✅ | ✅ |
 | GPU | ✅ panfrost | ✅ panfrost |
-| Video codecs | ✅ MPP (rkvdec/rkvenc/vdpu/vepu) | ✅ hantro (probes) |
+| Video codecs | ✅ MPP: FFmpeg `*_rkmpp`, GStreamer `mpp*` | ✅ V4L2: GStreamer `v4l2codecs` (decode only) |
 | NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame | ❌ no mainline driver |
 | eMMC | ❔ to be verified on a board with eMMC (HS200) | ❔ |
 
@@ -29,7 +29,12 @@ The mainline DTS for `edge` (7.0) is kept in `userpatches/` but is not enabled o
 
 ## Building
 
-Requires an x86_64 Debian or Ubuntu host with ~80 GB of free space, plus `aarch64-linux-gnu-gcc` and `libc6-dev-arm64-cross` (for the NPU test).
+Requires an x86_64 Debian (trixie) host with ~80 GB of free space and:
+
+```bash
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross \
+  cmake meson ninja-build mmdebstrap qemu-user-static
+```
 
 ```bash
 ./build.sh
@@ -38,7 +43,8 @@ Requires an x86_64 Debian or Ubuntu host with ~80 GB of free space, plus `aarch6
 The script:
 1. clones `armbian/build` at tag `v26.5.1` into `armbian-build/`;
 2. downloads the RKNN runtime, headers and test model from [airockchip/rknn-toolkit2](https://github.com/airockchip/rknn-toolkit2) `v2.3.2` (`scripts/fetch-npu.sh`) and builds the NPU test;
-3. copies `userpatches/` into `armbian-build/` and runs `compile.sh`.
+3. on the first run, cross-compiles the Rockchip multimedia packages (`scripts/build-multimedia.sh`, see below);
+4. copies `userpatches/` into `armbian-build/` and runs `compile.sh`.
 
 The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through; for the mainline kernel run `./build.sh BRANCH=current`.
 
@@ -58,6 +64,28 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame.
 - Moving the system to eMMC (on boards that have it): `armbian-install`.
 
+### Hardware video codecs
+
+**vendor** images ship the Rockchip MPP stack, cross-compiled by `scripts/build-multimedia.sh` into `userpatches/multimedia/*.deb` from pinned sources: MPP and RGA from [nyanmisaka/mpp](https://github.com/nyanmisaka/mpp) / [rk-mirrors](https://github.com/nyanmisaka/rk-mirrors) (`jellyfin-*` branches), [ffmpeg-rockchip](https://github.com/nyanmisaka/ffmpeg-rockchip) and [gstreamer-rockchip](https://github.com/JeffyCN/mirrors/tree/gstreamer-rockchip).
+
+| Package | Contents |
+|---|---|
+| `rockchip-mpp` | `librockchip_mpp`, headers, `mpi_dec_test`, `mpi_enc_test`, ... |
+| `librga-rockchip` | `librga`, headers |
+| `ffmpeg-rockchip` | static `ffmpeg` / `ffprobe` in `/usr/local/bin` |
+| `gstreamer1.0-rockchip` | `mppvideodec`, `mpph264enc`, `mpph265enc`, `mppjpegenc`, ... |
+
+RK3566 decodes H.264, H.265, VP9 (up to 4K), VP8, MPEG-2/4 and MJPEG, and encodes H.264, H.265 and MJPEG (up to 1080p).
+
+```bash
+# decode H.264 on the VPU and re-encode to H.265
+ffmpeg -c:v h264_rkmpp -i in.mp4 -c:v hevc_rkmpp -b:v 4M out.mkv
+# GStreamer: hardware decode to fakesink
+gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false
+```
+
+**current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
+
 ### System updates
 
 `apt upgrade` and `armbian-upgrade` are safe to use, with one exception: the kernel and DTB packages (`linux-image-<branch>-<family>`, `linux-dtb-<branch>-<family>`) are marked **hold** in the image. The official Armbian repository ships packages with the same names that do not contain `rk3566-kray-som-rkc.dtb` or this board's kernel options, so installing them would leave the board unbootable. Update the kernel by flashing a new release or by installing the `.deb` packages built from this repository.
@@ -71,6 +99,7 @@ To see the held packages: `apt-mark showhold`.
 ```
 build.sh                                   image build
 scripts/fetch-npu.sh                       RKNN SDK + NPU test
+scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   kernel/rk35xx-vendor-6.1/dt/             vendor kernel DTS (supported)
