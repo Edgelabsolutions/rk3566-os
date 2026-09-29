@@ -85,10 +85,12 @@ function post_customize_image__kray_som_rkc_hold_kernel() {
 #  current: mainline V4L2 stateless decoders (hantro, rkvdec) through
 #           GStreamer v4l2codecs from Debian, plus v4l-utils.
 function post_family_config__kray_som_rkc_multimedia_packages() {
-	add_packages_to_image gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+	# plugins-bad carries the h264parse/h265parse parsers (and v4l2codecs).
+	add_packages_to_image gstreamer1.0-tools gstreamer1.0-plugins-base \
+		gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
 	case "${BRANCH}" in
 		vendor) add_packages_to_image libdrm2 ;;
-		current) add_packages_to_image gstreamer1.0-plugins-bad v4l-utils ;;
+		current) add_packages_to_image v4l-utils ;;
 	esac
 }
 
