@@ -81,6 +81,13 @@ function custom_kernel_config__kray_som_rkc_rtw88_8821au() {
 	opts_m+=("RTW88_8821AU")
 }
 
+# The Ethernet LEDs are driven by the PHY itself, not by LED triggers. With
+# LED_TRIGGER_PHY on, every link-up logs "No phy led trigger registered for
+# speed(-1)" at alert level on the console.
+function custom_kernel_config__kray_som_rkc_no_phy_led_trigger() {
+	opts_n+=("LED_TRIGGER_PHY")
+}
+
 # The kernel and DTB packages carry this board's DTS and kernel options, but the
 # official Armbian apt repository ships packages with the same names without
 # them: an upgrade would drop rk3566-kray-som-rkc.dtb and leave the board
