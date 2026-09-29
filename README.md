@@ -61,7 +61,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ```bash
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
-  Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame.
+  Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame. Converting and running your own models: [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md#npu).
 - Moving the system to eMMC (on boards that have it): `armbian-install`.
 
 ### Hardware video codecs
@@ -83,6 +83,8 @@ ffmpeg -c:v h264_rkmpp -i in.mp4 -c:v hevc_rkmpp -b:v 4M out.mkv
 # GStreamer: hardware decode to fakesink
 gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false
 ```
+
+See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image.
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
