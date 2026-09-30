@@ -2,7 +2,24 @@
 
 Armbian (Debian 13 trixie, CLI) for the **Kray-SoM-RKC** board based on the Rockchip RK3566.
 
-The board is derived from the EmbedFire LubanCat Zero N design: RK3566, RK809 + TCS4525 PMIC, GbE (RGMII), HDMI, USB 2.0, microSD and optional eMMC. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
+The board is derived from the EmbedFire LubanCat Zero N design: RK3566, 1 GB DDR3L, RK809-5 + TCS4525 PMIC, RTL8211F Gigabit Ethernet, a PCIe 2.0 x1 M.2 slot, HDMI, USB, microSD and optional eMMC. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
+
+## Boards
+
+One image serves both boards; the device tree is selected with `fdtfile` in `/boot/armbianEnv.txt`:
+
+| Board | `fdtfile` | Differences |
+|---|---|---|
+| **Kray-SoM-RKC** (default) | `rockchip/rk3566-kray-som-rkc.dtb` | RTL8211F at MDIO address 1, reset on GPIO3_C0, RGMII clock from the PHY; PCIe 2.0 x1 M.2 slot |
+| EmbedFire LubanCat Zero N (reference board, 4 GB LPDDR4X) | `rockchip/rk3566-lubancat-zero-n.dtb` | PHY at MDIO address 0, reset on GPIO2_B0, RGMII clock from the SoC; no PCIe |
+
+To boot a LubanCat Zero N, change the line on the freshly flashed card (first partition) before the first boot:
+
+```bash
+sudo sed -i 's|^fdtfile=.*|fdtfile=rockchip/rk3566-lubancat-zero-n.dtb|' /media/$USER/armbi_root/boot/armbianEnv.txt
+```
+
+Both device trees share `rk3566-kray-som-rkc.dtsi`; the board files only add the Ethernet PHY wiring and the PCIe slot.
 
 ## Status
 
@@ -13,9 +30,10 @@ Two kernel branches are supported:
 
 | Component | vendor 6.1 | current 6.18 |
 |---|---|---|
-| 4 GB LPDDR4X, U-Boot, RK809 PMIC | ✅ | ✅ |
+| DDR3L / LPDDR4X, U-Boot, RK809 PMIC | ✅ | ✅ |
 | microSD (High Speed, 50 MHz) | ✅ | ✅ |
 | Ethernet 1 Gbps | ✅ | ✅ |
+| PCIe 2.0 x1 (M.2) | ❔ to be verified | ❔ to be verified |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
@@ -109,7 +127,7 @@ docs/                                      vendor image guides (NPU, codecs, cry
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
-  kernel/rk35xx-vendor-6.1/dt/             vendor kernel DTS (supported)
+  kernel/rk35xx-vendor-6.1/dt/             vendor kernel DTS (supported): common .dtsi + per-board .dts
   kernel/archive/rockchip64-{6.18,7.0}/dt/ mainline DTS (experimental)
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
@@ -121,7 +139,8 @@ userpatches/
 - **DDR.** `rk3566_ddr_1056MHz_v1.21.bin`, BL31 `rk3568_bl31_v1.44.elf`.
 - **microSD.** `sd-uhs-sdr104` is disabled: SDR104 tuning fails (`All phases bad`), so the card runs in High Speed mode.
 - **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
-- **Ethernet PHY** (JLSemi JL2101 or RTL8211F depending on revision) runs on the Generic PHY driver with RGMII delays `tx_delay=0x24`, `rx_delay=0x08` on both kernels.
+- **Ethernet PHY.** Realtek RTL8211F-CG at MDIO address 1, clocked by its own 25 MHz crystal (`clock_in_out = "input"`), RGMII delays `tx_delay=0x24`, `rx_delay=0x08`. Its reset (ETH_GMAC_RSTn) is on GPIO3_C0 and is pulsed and released by stmmac at probe; a PHY held in reset keeps its internal 1.0 V regulator off and does not answer on MDIO. The LubanCat Zero N reference board wires its PHY differently (address 0, reset on GPIO2_B0, clock from the SoC) and uses `rk3566-lubancat-zero-n.dtb`.
+- **PCIe.** `pcie2x1` over `combphy2` to the M.2 slot. The slot's 3.3 V is switched by PCIe_PWR_EN on GPIO0_A6 (`vcc3v3_pcie`, enabled before the link comes up), PERST# is GPIO1_B2.
 - **Vendor kernel rkr7.2.** Armbian v26.5.1 builds the vendor branch from `rk-6.1-rkr5.1` (6.1.115); the board config switches it to `rk-6.1-rkr7.2` (6.1.172) as Armbian main does, with Armbian main's kernel config. The EasePi A2/R2 DTS files in `kernel/rk35xx-vendor-6.1/dt/` are the kernel tree's own versions and override Armbian's copies, which do not compile against rkr7.2; the Unisoc uwe5622 WiFi driver is skipped because it fails to link. These workarounds can go once the build moves to an Armbian release that ships rkr7.2.
 - **Mainline WiFi.** Armbian's mainline config leaves `RTW88_8821AU` off; the board config enables it as a module for non-vendor branches.
 - **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end1` on vendor and `end0` on mainline. The root filesystem is mounted by UUID, so this does not affect booting.
