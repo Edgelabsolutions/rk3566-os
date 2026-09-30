@@ -8,19 +8,90 @@ This guide covers the **vendor** image (Rockchip BSP kernel 6.1). RK3566 has two
 The CPU instructions are the faster path for everything except SHA384/512. The engine is useful when the CPU cores are busy with other work, and for SHA512.
 
 - [Hardware random number generator](#hardware-random-number-generator)
+  - [How it was tested](#how-it-was-tested)
+  - [Results (board 1)](#results-board-1)
+  - [With the TRNG disabled](#with-the-trng-disabled)
 - [Default kernel drivers](#default-kernel-drivers)
 - [Using the crypto engine](#using-the-crypto-engine)
 - [Benchmark](#benchmark)
 
 ## Hardware random number generator
 
-The RK3566 TRNG (`rng@fe388000`) is **disabled** in this image. Its output is biased: on board 1, `cat /dev/hwrng | rngtest -c 1000` failed 949 of 1000 FIPS 140-2 blocks (Monobit 378, Poker 857, Runs 928). The vendor driver registers it with quality 999, so the kernel would have credited that data as entropy. Mainline keeps the TRNG disabled on RK3566 for the same reason.
+The RK3566 TRNG (`rng@fe388000`) is **disabled** in this image because its output is biased. The vendor driver registers it with quality 999, so while it was enabled the kernel credited that data as entropy for `/dev/random`. Mainline keeps the TRNG disabled on RK3566 for the same reason.
 
-Consequences:
+### How it was tested
+
+`rngtest` (from `rng-tools-debian`, already in the image) reads the source in 20000-bit blocks and runs the FIPS 140-2 statistical tests on each block:
+
+| Test | Fails the block when |
+|---|---|
+| Monobit | the number of ones is outside 9725–10275 |
+| Poker | the distribution of 4-bit values is too uneven (statistic outside 2.16–46.17) |
+| Runs | runs of equal bits of length 1–6+ are outside their allowed ranges |
+| Long run | a run of 26 or more equal bits occurs |
+| Continuous run | the generator repeats its previous output (stuck source) |
+
+A good random source still fails about one block in a thousand by chance. A block can fail several tests at once, so the per-test counts add up to more than the total.
+
+The TRNG was tested on the vendor 6.1.172 image built before it was disabled (#6), twice, 1000 blocks each:
+
+```bash
+cat /dev/hwrng | rngtest -c 1000
+```
+
+The kernel's own generator was tested on the image with the TRNG disabled:
+
+```bash
+cat /dev/random | rngtest -c 1000
+```
+
+### Results (board 1)
+
+| Source | Blocks passed | Failed | Monobit | Poker | Runs | Long run | Continuous run |
+|---|---|---|---|---|---|---|---|
+| `/dev/hwrng` (TRNG), run 1 | 38 | **962** | 372 | 918 | 943 | 0 | 0 |
+| `/dev/hwrng` (TRNG), run 2 | 51 | **949** | 378 | 857 | 928 | 0 | 0 |
+| `/dev/random` (TRNG disabled) | 999 | 1 | 0 | 0 | 0 | 1 | 0 |
+
+The TRNG fails 95–96 % of the blocks, mostly on Poker and Runs (patterns and runs of equal bits) and on Monobit in over a third of them (more ones than zeros, or the reverse). `/dev/random` is within what a good source gives. The TRNG also delivered only about 1.1 Mbit/s on average (rngtest "input channel speed").
+
+Full output of run 2:
+
+```
+rngtest: bits received from input: 20000032
+rngtest: FIPS 140-2 successes: 51
+rngtest: FIPS 140-2 failures: 949
+rngtest: FIPS 140-2(2001-10-10) Monobit: 378
+rngtest: FIPS 140-2(2001-10-10) Poker: 857
+rngtest: FIPS 140-2(2001-10-10) Runs: 928
+rngtest: FIPS 140-2(2001-10-10) Long run: 0
+rngtest: FIPS 140-2(2001-10-10) Continuous run: 0
+rngtest: input channel speed: (min=9.883; avg=1101.685; max=19531250.000)Kibits/s
+rngtest: FIPS tests speed: (min=28.510; avg=76.483; max=88.714)Mibits/s
+rngtest: Program run time: 19896076 microseconds
+```
+
+and of `/dev/random`:
+
+```
+rngtest: bits received from input: 20000032
+rngtest: FIPS 140-2 successes: 999
+rngtest: FIPS 140-2 failures: 1
+rngtest: FIPS 140-2(2001-10-10) Monobit: 0
+rngtest: FIPS 140-2(2001-10-10) Poker: 0
+rngtest: FIPS 140-2(2001-10-10) Runs: 0
+rngtest: FIPS 140-2(2001-10-10) Long run: 1
+rngtest: FIPS 140-2(2001-10-10) Continuous run: 0
+rngtest: input channel speed: (min=302.754; avg=3823.108; max=9536.743)Mibits/s
+rngtest: FIPS tests speed: (min=57.278; avg=87.180; max=88.303)Mibits/s
+rngtest: Program run time: 224329 microseconds
+```
+
+### With the TRNG disabled
 
 - `/dev/hwrng` still exists (the `hw_random` core creates it), but `/sys/class/misc/hw_random/rng_available` is empty and reads fail with `No such device`;
 - `rng-tools-debian` finds no device and is skipped at boot (`Skipped due to 'exec-condition'`), not failed;
-- `/dev/random` is fed by the kernel's own sources and passes: `cat /dev/random | rngtest -c 1000` gives 999 of 1000 (one failure per 1000 blocks is expected for a good source).
+- `/dev/random` is fed by the kernel's own sources (CPU jitter, interrupts, device input) and passes the FIPS tests, as shown above.
 
 ## Default kernel drivers
 
