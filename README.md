@@ -22,6 +22,8 @@ Two kernel branches are supported:
 | HDMI (video) | ✅ | ✅ |
 | GPU | ✅ panfrost | ✅ panfrost |
 | Video codecs | ✅ MPP: FFmpeg `*_rkmpp`, GStreamer `mpp*` | ✅ V4L2: GStreamer `v4l2codecs` (decode only) |
+| Crypto | ✅ ARMv8 CE by default; Crypto v2 engine via `/dev/crypto` | ✅ ARMv8 CE |
+| Hardware RNG | disabled (biased output) | disabled |
 | NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame | ❌ no mainline driver |
 | eMMC | ❔ to be verified on a board with eMMC (HS200) | ❔ |
 
@@ -84,7 +86,7 @@ ffmpeg -c:v h264_rkmpp -i in.mp4 -c:v hevc_rkmpp -b:v 4M out.mkv
 gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false
 ```
 
-See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image.
+See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image, and [docs/vendor-crypto.md](docs/vendor-crypto.md) for the crypto engine, its benchmark against the CPU crypto instructions, and the disabled TRNG.
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
@@ -102,6 +104,8 @@ To see the held packages: `apt-mark showhold`.
 build.sh                                   image build
 scripts/fetch-npu.sh                       RKNN SDK + NPU test
 scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
+tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
+docs/                                      vendor image guides (NPU, codecs, crypto)
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
