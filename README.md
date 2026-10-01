@@ -83,6 +83,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame. Converting and running your own models: [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md#npu).
+- Hardware smoke test: `sudo kray-board-check` (PASS / FAIL / SKIP per subsystem). Test plan and expected values: [docs/testing.md](docs/testing.md).
 - Moving the system to eMMC (on boards that have it): `armbian-install`.
 
 ### Hardware video codecs
@@ -135,6 +136,7 @@ userpatches/
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
   hailo/kernel/                            Kconfig/Makefile to build hailo_pci in-tree
+  board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
 ```
 
 ## Technical notes
@@ -147,5 +149,5 @@ userpatches/
 - **PCIe.** `pcie2x1` over `combphy2` to the M.2 slot. The slot's 3.3 V is switched by PCIe_PWR_EN on GPIO0_A6 (`vcc3v3_pcie`, enabled before the link comes up), PERST# is GPIO1_B2.
 - **Vendor kernel rkr7.2.** Armbian v26.5.1 builds the vendor branch from `rk-6.1-rkr5.1` (6.1.115); the board config switches it to `rk-6.1-rkr7.2` (6.1.172) as Armbian main does, with Armbian main's kernel config. The EasePi A2/R2 DTS files in `kernel/rk35xx-vendor-6.1/dt/` are the kernel tree's own versions and override Armbian's copies, which do not compile against rkr7.2; the Unisoc uwe5622 WiFi driver is skipped because it fails to link. These workarounds can go once the build moves to an Armbian release that ships rkr7.2.
 - **Mainline WiFi.** Armbian's mainline config leaves `RTW88_8821AU` off; the board config enables it as a module for non-vendor branches.
-- **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end1` on vendor and `end0` on mainline. The root filesystem is mounted by UUID, so this does not affect booting.
+- **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end0` on Kray-SoM-RKC, and `end1` (vendor) / `end0` (mainline) on LubanCat Zero N. The root filesystem is mounted by UUID, so this does not affect booting.
 - **DTS sources:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` from [LubanCat/kernel](https://github.com/LubanCat/kernel) and upstream `rk3566-lubancat-1.dts`.

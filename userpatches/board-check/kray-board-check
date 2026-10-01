@@ -1,0 +1,196 @@
+#!/bin/bash
+# Hardware smoke test for Kray-SoM-RKC OS images (Kray-SoM-RKC and the
+# LubanCat Zero N reference board, vendor and mainline kernels).
+#
+#   sudo kray-board-check            # all checks, about 2-3 minutes
+#   sudo kray-board-check --quick    # skip the NPU, video and NVMe read tests
+#
+# Every check prints its details and a PASS / FAIL / SKIP line; a summary
+# follows at the end. Save the output when reporting results:
+#   sudo kray-board-check 2>&1 | tee kray-board-check.log
+# Installed as /usr/bin/kray-board-check; see docs/testing.md in
+# kray-som-rkc-os for expected values.
+
+QUICK=0
+[[ "${1:-}" == "--quick" ]] && QUICK=1
+[[ $EUID -eq 0 ]] || { echo "run as root (sudo kray-board-check)" >&2; exit 1; }
+
+declare -a SUMMARY=()
+section() { echo; echo "===== $*"; }
+result() { # status name note
+	printf '%-5s %s%s\n' "$1" "$2" "${3:+ ($3)}"
+	SUMMARY+=("$(printf '%-5s %s%s' "$1" "$2" "${3:+ ($3)}")")
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+
+KERNEL="$(uname -r)"
+case "${KERNEL}" in
+	*vendor*) BRANCH=vendor ;;
+	*) BRANCH=mainline ;;
+esac
+MODEL="$(tr -d '\0' < /proc/device-tree/model 2>/dev/null)"
+case "${MODEL}" in
+	*LubanCat*) BOARD=lubancat ;;
+	*) BOARD=kray ;;
+esac
+NIC="$(ls /sys/class/net | grep -E '^end[0-9]' | head -1)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "${WORK}"' EXIT
+
+section "System"
+echo "kernel:  ${KERNEL} (${BRANCH})"
+echo "model:   ${MODEL} (${BOARD})"
+grep '^fdtfile' /boot/armbianEnv.txt 2>/dev/null
+grep -m1 PRETTY_NAME /etc/os-release
+free -m | head -2
+for z in /sys/class/thermal/thermal_zone*/temp; do echo "$(basename "$(dirname "$z")"): $(( $(cat "$z") / 1000 )) C"; done
+result PASS "boot" "${KERNEL}"
+
+section "Ethernet"
+if [[ -z "${NIC}" ]]; then
+	result FAIL "ethernet" "no end* interface"
+else
+	dmesg | grep -E 'PHY \[' | tail -1
+	ethtool "${NIC}" 2>/dev/null | grep -E 'Speed|Duplex|PHYAD|Link detected'
+	ip -4 -br addr show "${NIC}"
+	speed="$(cat "/sys/class/net/${NIC}/speed" 2>/dev/null)"
+	if [[ "$(cat "/sys/class/net/${NIC}/carrier" 2>/dev/null)" != 1 ]]; then
+		result FAIL "ethernet" "${NIC}: no link (cable?)"
+	elif ping -c 3 -W 2 -I "${NIC}" 1.1.1.1 >/dev/null 2>&1; then
+		[[ "${speed}" == 1000 ]] && result PASS "ethernet" "${NIC} ${speed}Mb/s, ping OK" \
+			|| result FAIL "ethernet" "${NIC} ${speed}Mb/s, expected 1000 (cable/contact?)"
+	else
+		result FAIL "ethernet" "${NIC} ${speed}Mb/s, no ping to 1.1.1.1"
+	fi
+fi
+
+section "PCIe / NVMe"
+if [[ "${BOARD}" == lubancat ]]; then
+	result SKIP "pcie" "LubanCat Zero N has no PCIe slot"
+else
+	dmesg | grep -iE 'link up|Link Fail' | tail -2
+	have lspci && lspci -nn
+	if have lspci && [[ -n "$(lspci -d ::0108 2>/dev/null; lspci -d 1e60: 2>/dev/null)" ]]; then
+		lnk="$(lspci -vv 2>/dev/null | grep -m1 -E 'LnkSta:' | tr -s ' \t' ' ' | sed 's/^ //')"
+		result PASS "pcie" "${lnk}"
+	elif have lspci && [[ "$(lspci | wc -l)" -gt 1 ]]; then
+		result PASS "pcie" "link up, unknown device"
+	else
+		result SKIP "pcie" "no card in the M.2 slot (or no link)"
+	fi
+	if [[ -b /dev/nvme0n1 ]]; then
+		lsblk -d -o NAME,SIZE,MODEL /dev/nvme0n1
+		if [[ ${QUICK} -eq 0 ]]; then
+			rate="$(dd if=/dev/nvme0n1 of=/dev/null bs=1M count=1000 iflag=direct 2>&1 | tail -1 | awk -F', ' '{print $NF}')"
+			result PASS "nvme" "read ${rate}"
+		else
+			result PASS "nvme" "detected"
+		fi
+	else
+		result SKIP "nvme" "no NVMe"
+	fi
+fi
+
+section "Hailo-8"
+modinfo hailo_pci 2>/dev/null | grep -E '^(version|vermagic)'
+if modprobe hailo_pci 2>/dev/null && lsmod | grep -q '^hailo_pci'; then
+	result PASS "hailo driver" "hailo_pci $(modinfo -F version hailo_pci) loaded"
+else
+	result FAIL "hailo driver" "modprobe hailo_pci failed"
+fi
+[[ -f /lib/firmware/hailo/hailo8_fw.bin ]] && result PASS "hailo firmware" "/lib/firmware/hailo/hailo8_fw.bin" \
+	|| result FAIL "hailo firmware" "missing"
+if have hailortcli; then
+	ver="$(cd "${WORK}" && hailortcli --version 2>&1 | head -1)"
+	result PASS "hailort" "${ver}"
+	if ls /dev/hailo* >/dev/null 2>&1; then
+		(cd "${WORK}" && hailortcli fw-control identify 2>&1 | head -12)
+		(cd "${WORK}" && hailortcli fw-control identify >/dev/null 2>&1) \
+			&& result PASS "hailo device" "$(ls /dev/hailo* | tr '\n' ' ')" \
+			|| result FAIL "hailo device" "fw-control identify failed"
+	else
+		result SKIP "hailo device" "no Hailo-8 present"
+	fi
+else
+	result FAIL "hailort" "hailortcli missing"
+fi
+
+section "NPU"
+if [[ "${BRANCH}" != vendor ]]; then
+	result SKIP "npu" "vendor kernel only"
+elif [[ ${QUICK} -eq 1 ]]; then
+	result SKIP "npu" "--quick"
+else
+	out="$(/usr/share/kray-som-rkc/npu-test/run.sh 2>&1)"
+	echo "${out}" | grep -E 'RKNPU driver|rknn_run'
+	best="$(echo "${out}" | grep -m1 -o 'best [0-9.]* ms')"
+	echo "${out}" | grep -qE '^ +156: 0\.9' && result PASS "npu" "MobileNet ${best}, dog=156" \
+		|| result FAIL "npu" "unexpected output"
+fi
+
+section "Video"
+if [[ ${QUICK} -eq 1 ]]; then
+	result SKIP "video" "--quick"
+elif [[ "${BRANCH}" == vendor ]]; then
+	enc="$(ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 10 \
+		-pix_fmt nv12 -c:v h264_rkmpp -b:v 8M -y "${WORK}/t.mp4" -stats 2>&1 | tr '\r' '\n' | grep -o 'fps=[ 0-9.]*' | tail -1)"
+	[[ -s "${WORK}/t.mp4" ]] && result PASS "h264 encode (mpp)" "${enc// /}" || result FAIL "h264 encode (mpp)"
+	tr="$(ffmpeg -hide_banner -loglevel error -i "${WORK}/t.mp4" -c:v h264_rkmpp -b:v 8M -y "${WORK}/t2.mp4" \
+		-stats 2>&1 | tr '\r' '\n' | grep -o 'fps=[ 0-9.]*' | tail -1)"
+	[[ -s "${WORK}/t2.mp4" ]] && result PASS "h264 transcode (mpp)" "${tr// /}" || result FAIL "h264 transcode (mpp)"
+	dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+	[[ -n "${dec}" ]] && result PASS "h264 decode (mppvideodec)" "300 frames, ${dec#*after }" || result FAIL "h264 decode (mppvideodec)"
+else
+	# Mainline has no hardware encoder: make the test stream with a software one.
+	enc=""
+	for e in x264enc openh264enc; do
+		gst-inspect-1.0 "${e}" >/dev/null 2>&1 && { enc="${e}"; break; }
+	done
+	if [[ -z "${enc}" ]]; then
+		result SKIP "h264 decode (v4l2slh264dec)" "no software H.264 encoder for the test file (apt install gstreamer1.0-plugins-ugly)"
+	else
+		opts=""; [[ "${enc}" == x264enc ]] && opts="speed-preset=ultrafast"
+		gst-launch-1.0 -q videotestsrc num-buffers=300 ! video/x-raw,width=1920,height=1080,format=I420 \
+			! ${enc} ${opts} ! h264parse ! mp4mux ! filesink location="${WORK}/t.mp4" 2>/dev/null
+		dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! v4l2slh264dec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+		[[ -n "${dec}" ]] && result PASS "h264 decode (v4l2slh264dec)" "300 frames, ${dec#*after }" || result FAIL "h264 decode (v4l2slh264dec)"
+	fi
+fi
+
+section "Crypto / RNG"
+if [[ "${BRANCH}" == vendor ]]; then
+	dmesg | grep -i 'rk-crypto' | tail -1
+	dmesg | grep -qi 'Accelerator successfully registered' && result PASS "crypto engine" "rk-crypto registered" \
+		|| result FAIL "crypto engine" "rk-crypto not registered"
+fi
+avail="$(cat /sys/class/misc/hw_random/rng_available 2>/dev/null)"
+[[ -z "${avail}" ]] && result PASS "hw rng disabled" "rng_available empty" || result FAIL "hw rng disabled" "${avail}"
+
+section "USB / WiFi"
+lsusb -t 2>/dev/null
+n="$(lsusb 2>/dev/null | grep -vc 'root hub')"
+[[ "${n}" -gt 0 ]] && result PASS "usb" "${n} device(s)" || result SKIP "usb" "nothing plugged in"
+if iw dev 2>/dev/null | grep -q Interface; then
+	iw dev | grep -E 'Interface|ssid'
+	result PASS "wifi" "$(iw dev | awk '/Interface/{print $2}' | xargs)"
+else
+	result SKIP "wifi" "no WiFi adapter"
+fi
+
+section "HDMI"
+st="$(cat /sys/class/drm/card*-HDMI*/status 2>/dev/null | head -1)"
+[[ "${st}" == connected ]] && result PASS "hdmi" "connected (check the picture)" || result SKIP "hdmi" "${st:-no HDMI connector}"
+
+section "Packages"
+held="$(apt-mark showhold | xargs)"
+echo "${held}"
+echo "${held}" | grep -q 'linux-image' && result PASS "kernel held" "${held}" || result FAIL "kernel held" "kernel/DTB not on hold"
+
+section "Kernel errors (err and above)"
+dmesg --level=err,crit,alert,emerg | tail -20
+
+section "Summary"
+printf '%s\n' "${SUMMARY[@]}"
+fails="$(printf '%s\n' "${SUMMARY[@]}" | grep -c '^FAIL')"
+echo "${fails} failed"
+exit $(( fails > 0 ))
