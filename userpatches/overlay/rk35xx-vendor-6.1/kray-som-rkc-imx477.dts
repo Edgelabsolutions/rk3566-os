@@ -1,0 +1,151 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: Sony IMX477 camera (Raspberry Pi HQ Camera) on the CSI
+ * connector. Vendor kernel only.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-imx477
+ *
+ * Use either this overlay or kray-som-rkc-imx219, not both.
+ *
+ * Sensor on I2C1 at 0x1a. The HQ Camera's 15-pin cable carries two
+ * MIPI CSI-2 lanes (the connector on the board has four); the imx477
+ * driver supports two lanes at a 450 MHz link frequency. The module has
+ * its own 24 MHz oscillator. The camera's power-down (GPIO2_C0) and reset
+ * (GPIO2_C1) lines are held high, as for the IMX219.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			kray_cam_clk: kray-camera-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <24000000>;
+				clock-output-names = "kray_cam_clk";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio2>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-pdn", "camera-reset";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx477: imx477@1a {
+				compatible = "sony,imx477";
+				reg = <0x1a>;
+				clocks = <&kray_cam_clk>;
+				rockchip,camera-module-index = <0>;
+				rockchip,camera-module-facing = "back";
+				rockchip,camera-module-name = "rpi-hq";
+				rockchip,camera-module-lens-name = "default";
+
+				port {
+					imx477_out: endpoint {
+						remote-endpoint = <&dphy0_in_imx477>;
+						data-lanes = <1 2>;
+						clock-noncontinuous;
+						link-frequencies = /bits/ 64 <450000000>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_imx477: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&imx477_out>;
+						data-lanes = <1 2>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};
