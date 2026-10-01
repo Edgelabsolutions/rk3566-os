@@ -56,10 +56,29 @@ gst-launch-1.0 v4l2src device=/dev/video0 num-buffers=300 \
   ! mpph264enc ! h264parse ! mp4mux ! filesink location=/tmp/camera.mp4
 ```
 
+## Sensor mode (IMX477)
+
+The sensor starts in its full-resolution mode (4056x3040, at most 10 fps) and the ISP scales to the size asked on the video node. For more frames per second switch the sensor to a binned mode first:
+
+```bash
+MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
+media-ctl -d $MD --set-v4l2 '"imx477 1-001a":0[fmt:SRGGB12_1X12/2028x1520]'
+```
+
+| Sensor mode | Output (`rkisp_mainpath`, NV12) | Measured |
+|---|---|---|
+| 4056x3040 | 2028x1520 | 10 fps |
+| 2028x1520 | 2028x1520 | 30 fps |
+
+The device numbers of `/dev/media*` and `/dev/video*` change when a USB camera is plugged in; the commands here find the ISP by name. The main path in the capture examples is `$(v4l2-ctl --list-devices | awk '/rkisp_mainpath/{getline; print $1; exit}')`.
+
 ## Image quality
 
 On Rockchip SoCs auto exposure, white balance and the other 3A controls run in user space in Rockchip's `rkaiq` with a tuning (IQ) file for the sensor. The image does not ship `rkaiq`, so frames come out with the ISP's default parameters: expect wrong exposure and colours until 3A is added. Raw Bayer capture does not depend on it.
 
 ## Status
 
-Both overlays apply to the Kray-SoM-RKC device tree and build with the kernel; the `imx477` module builds against the vendor kernel. Neither has been confirmed with a camera yet.
+- **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above.
+- **IMX219**: the overlay applies and builds; not yet tested with a module.
+
+Image quality (3A) is untuned in both cases, see above.
