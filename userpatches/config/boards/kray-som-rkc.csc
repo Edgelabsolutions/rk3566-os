@@ -181,12 +181,14 @@ function custom_kernel_config__kray_som_rkc_overlays() {
 
 # Sony IMX477 (Raspberry Pi HQ Camera) for the vendor kernel: Raspberry Pi's
 # driver with the calls Rockchip's CSI-2 D-PHY and ISP need
-# (userpatches/camera/imx477), built as a module next to the other sensors.
-# Used by the kray-som-rkc-imx477 overlay.
+# (userpatches/camera/imx477). Built in like imx219: as a module it probes
+# after rkisp has given up waiting for its sensor ("clear unready subdev"),
+# and the sensor never gets linked to csi2-dphy0. Used by the
+# kray-som-rkc-imx477 overlay.
 function custom_kernel_config__kray_som_rkc_imx477() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	local src="${USERPATCHES_PATH}/camera/imx477"
-	kernel_config_modifying_hashes+=("imx477=$(cat "${src}"/* | sha256sum | cut -c1-16)")
+	kernel_config_modifying_hashes+=("imx477=y-$(cat "${src}"/* | sha256sum | cut -c1-16)")
 	[[ -f .config ]] || return 0
 
 	local dir="${kernel_work_dir}/drivers/media/i2c"
@@ -198,7 +200,7 @@ function custom_kernel_config__kray_som_rkc_imx477() {
 	fi
 	grep -q 'CONFIG_VIDEO_IMX477' "${dir}/Makefile" ||
 		echo 'obj-$(CONFIG_VIDEO_IMX477) += imx477.o' >> "${dir}/Makefile"
-	opts_m+=("VIDEO_IMX477")
+	opts_y+=("VIDEO_IMX477")
 }
 
 # Firmware (redistributed in binary form with Hailo's EULA), device node

@@ -7,7 +7,7 @@ Kray-SoM-RKC has a MIPI CSI-2 connector (four lanes routed) for Raspberry Pi sty
 | Raspberry Pi Camera v2 | Sony IMX219, 8 MP | `kray-som-rkc-imx219` | `0x10` | 2 |
 | Raspberry Pi HQ Camera | Sony IMX477, 12.3 MP | `kray-som-rkc-imx477` | `0x1a` | 2 (the module's 15-pin cable carries two) |
 
-The IMX477 driver is Raspberry Pi's (`raspberrypi/linux` rpi-6.1.y), carried in `userpatches/camera/imx477` with the bus-configuration and frame-interval calls the Rockchip CSI-2 D-PHY and ISP drivers need, and built as the `imx477` module. Its modes: 4056x3040, 2028x1520, 2028x1080, 1332x990 (12/10-bit Bayer).
+The IMX477 driver is Raspberry Pi's (`raspberrypi/linux` rpi-6.1.y), carried in `userpatches/camera/imx477` with the bus-configuration and frame-interval calls the Rockchip CSI-2 D-PHY and ISP drivers need, and built into the vendor kernel (as a module it would probe after the ISP has stopped waiting for its sensor). Its modes: 4056x3040, 2028x1520, 2028x1080, 1332x990 (12/10-bit Bayer).
 
 Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no mainline driver.
 
@@ -16,7 +16,7 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 | Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-imx219.dtbo`, `kray-som-rkc-imx477.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
 | Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` |
 | Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
-| Kernel | `imx219` (built in) and `imx477` (module) drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1) |
+| Kernel | `imx219` and `imx477` drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 
 ## Enable
