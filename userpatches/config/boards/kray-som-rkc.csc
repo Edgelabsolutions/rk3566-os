@@ -1,4 +1,4 @@
-# Rockchip RK3566 quad core 1/2/4GB RAM GBE HDMI USB2 microSD (optional eMMC)
+# Rockchip RK3566 quad core 1/4GB RAM GBE HDMI USB2 microSD M.2 PCIe
 BOARD_NAME="Kray-SoM-RKC"
 BOARD_VENDOR="kray"
 BOARDFAMILY="rk35xx"

@@ -567,16 +567,6 @@
 	status = "okay";
 };
 
-/* Optional eMMC (not populated on every SKU) */
-&sdhci {
-	bus-width = <8>;
-	supports-emmc;
-	non-removable;
-	max-frequency = <200000000>;
-	mmc-hs200-1_8v;
-	status = "okay";
-};
-
 &sdmmc0 {
 	max-frequency = <150000000>;
 	supports-sd;

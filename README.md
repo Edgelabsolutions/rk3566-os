@@ -2,7 +2,7 @@
 
 Armbian (Debian 13 trixie, CLI) for the **Kray-SoM-RKC** board based on the Rockchip RK3566.
 
-The board is derived from the EmbedFire LubanCat Zero N design: RK3566, 1 GB DDR3L, RK809-5 + TCS4525 PMIC, RTL8211F Gigabit Ethernet, a PCIe 2.0 x1 M.2 slot, HDMI, USB, microSD and optional eMMC. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
+The board is derived from the EmbedFire LubanCat Zero N design: RK3566, 1 GB DDR3L, RK809-5 + TCS4525 PMIC, RTL8211F Gigabit Ethernet, a PCIe 2.0 x1 M.2 slot, HDMI, USB and microSD. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
 
 ## Boards
 
@@ -44,7 +44,6 @@ Two kernel branches are supported:
 | Crypto | ✅ ARMv8 CE by default; Crypto v2 engine via `/dev/crypto` | ✅ ARMv8 CE |
 | Hardware RNG | disabled (biased output) | disabled |
 | NPU (RKNN runtime 2.3.2) | ✅ MobileNet v1 ≈ 4.5 ms/frame | ❌ no mainline driver |
-| eMMC | ❔ to be verified on a board with eMMC (HS200) | ❔ |
 
 The mainline DTS for `edge` (7.0) is kept in `userpatches/` but is not enabled or tested.
 
@@ -84,7 +83,6 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ```
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame. Converting and running your own models: [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md#npu).
 - Hardware smoke test: `sudo kray-board-check` (PASS / FAIL / SKIP per subsystem). Test plan and expected values: [docs/testing.md](docs/testing.md).
-- Moving the system to eMMC (on boards that have it): `armbian-install`.
 
 ### Hardware video codecs
 
