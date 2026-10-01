@@ -10,7 +10,8 @@ auto exposure drives the IMX477 correctly:
     gives that exactly with C1 = C0 = -1024 and M0 = -1;
   - exposure: in lines, at least 4, at most frame length - 22;
   - no sensor digital gain, no HDR;
-  - resolution: the 2028x1520 binned mode.
+  - resolution: the 2028x1520 binned mode (the driver's default);
+  - lens shading correction off: the OV13850's tables belong to another lens.
 
 Colour (AWB light sources, CCM, LSC) stays the OV13850's: auto white balance
 and exposure work, but colours are not calibrated for the IMX477.
@@ -42,6 +43,10 @@ lin["CISTimeRegOdevity"] = {"fCoeff": [1, 0]}
 cal["CISHdrSet"]["hdr_en"] = 0
 cal["CISDcgSet"]["Linear"]["support_en"] = 0
 cal["CISFlip"] = 0
+
+for scene in iq["main_scene"]:
+    for sub in scene["sub_scene"]:
+        sub["scene_isp21"]["lsc_v2"]["common"]["enable"] = 0
 
 with open(dst, "w") as f:
     json.dump(iq, f, indent=1)

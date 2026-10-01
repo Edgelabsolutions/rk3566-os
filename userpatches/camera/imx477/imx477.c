@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Kray-SoM-RKC OS: Raspberry Pi's imx477 driver (raspberrypi/linux rpi-6.1.y,
- * commit f4102d30e760) for the Rockchip vendor kernel. Changes: added
- * get_mbus_config and g_frame_interval for the Rockchip CSI-2 D-PHY and
- * ISP drivers, RKMODULE_GET_MODULE_INFO and Rockchip subdev naming for
- * rkaiq; the sony,imx378 compatible is dropped so it does not compete with
- * Rockchip's imx378 driver.
+ * commit f4102d30e760) for the Rockchip vendor kernel. Changes:
+ *  - get_mbus_config and g_frame_interval for the Rockchip CSI-2 D-PHY and
+ *    ISP drivers;
+ *  - for rkaiq: RKMODULE_GET_MODULE_INFO, linear-only RKMODULE_[GS]ET_HDR_CFG
+ *    and Rockchip subdev naming;
+ *  - 2028x1520 as the default mode;
+ *  - the sony,imx378 compatible dropped (left to Rockchip's imx378 driver).
  */
 /*
  * A V4L2 driver for Sony IMX477 cameras.
@@ -1292,8 +1294,12 @@ static u32 imx477_get_format_code(struct imx477 *imx477, u32 code)
 
 static void imx477_set_default_format(struct imx477 *imx477)
 {
-	/* Set default mode to max resolution */
-	imx477->mode = &supported_modes_12bit[0];
+	/*
+	 * Start in the 2028x1520 binned mode (up to 40 fps) rather than full
+	 * resolution: rkaiq prepares the ISP for the sensor mode it finds at
+	 * start-up, and its IMX477 tuning file is made for this mode.
+	 */
+	imx477->mode = &supported_modes_12bit[1];
 	imx477->fmt_code = MEDIA_BUS_FMT_SRGGB12_1X12;
 }
 
@@ -1984,7 +1990,17 @@ static long imx477_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 	struct imx477 *imx477 = to_imx477(sd);
 	struct rkmodule_inf *inf;
 
+	struct rkmodule_hdr_cfg *hdr;
+
 	switch (cmd) {
+	case RKMODULE_GET_HDR_CFG:
+		hdr = arg;
+		memset(hdr, 0, sizeof(*hdr));
+		hdr->hdr_mode = NO_HDR;
+		return 0;
+	case RKMODULE_SET_HDR_CFG:
+		hdr = arg;
+		return hdr->hdr_mode == NO_HDR ? 0 : -EINVAL;
 	case RKMODULE_GET_MODULE_INFO:
 		inf = arg;
 		memset(inf, 0, sizeof(*inf));
