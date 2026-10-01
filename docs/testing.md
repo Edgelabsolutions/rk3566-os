@@ -24,7 +24,8 @@ Connect UART2 (1500000 8N1), Ethernet, HDMI, a USB hub with the USB WiFi adapter
 
 - DDR training ends with `change to: 1056MHz(final freq)`; U-Boot prints `PMIC: RK809`;
 - no `Kernel panic`, no `panic_on_set_idle`;
-- login prompt on the console and on HDMI; first-login setup completes.
+- login prompt on the console and on HDMI (no automatic login), with the board's IP in the banner;
+- from a PC on the same network: `ssh root@kray-som-rkc.local`, password `1234`, the forced password change works, then a new login with the new password.
 
 ## 2. Automated smoke test
 

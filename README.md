@@ -76,6 +76,11 @@ The RKNN SDK files are distributed under the Rockchip license, so they are not s
 xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
+- **First login over the network.** Plug in Ethernet (DHCP) and log in as root; no console or first-login wizard is needed:
+  ```bash
+  ssh root@kray-som-rkc.local     # or ssh root@<IP from your router>
+  ```
+  The initial password is `1234` and is already expired: the first login asks for it once more and then for a new password, and closes the session; log in again with the new one. The hostname is published over mDNS (avahi); with several boards on one network the next ones become `kray-som-rkc-2.local` and so on. The console login prompt also shows the board's IP. No regular user is created; add one with `adduser` if needed.
 - Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
 - NPU check (vendor images only):
   ```bash

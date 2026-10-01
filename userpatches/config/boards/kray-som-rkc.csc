@@ -185,3 +185,25 @@ function post_family_config__kray_som_rkc_board_check_packages() {
 function post_customize_image__kray_som_rkc_board_check() {
 	install -D -m 0755 "${USERPATCHES_PATH}/board-check/kray-board-check" "${SDCARD}/usr/bin/kray-board-check"
 }
+
+# First login over the network instead of Armbian's interactive first-login
+# wizard on the console: no wizard, no console autologin, root keeps the
+# build's root password (ROOTPWD, Armbian default 1234) but it is expired, so
+# the first login (ssh root@kray-som-rkc.local or the console) has to set a
+# new one. avahi publishes <hostname>.local and the SSH service.
+function post_family_config__kray_som_rkc_network_first_login_packages() {
+	add_packages_to_image avahi-daemon libnss-mdns
+}
+
+function post_customize_image__kray_som_rkc_network_first_login() {
+	display_alert "$BOARD" "First login over SSH: no wizard, root password expired" "info"
+	rm -f "${SDCARD}/root/.not_logged_in_yet"
+	rm -f "${SDCARD}/etc/systemd/system/getty@.service.d/override.conf" \
+		"${SDCARD}/etc/systemd/system/serial-getty@.service.d/override.conf"
+	chroot_sdcard chage -d 0 root
+	# Show how to reach the board on the console login prompt (agetty: \4 = IPv4, \n = hostname)
+	cat >> "${SDCARD}/etc/issue" <<- 'ISSUE'
+		IP: \4   ssh root@\n.local   (first login: password 1234, then set a new one)
+
+	ISSUE
+}
