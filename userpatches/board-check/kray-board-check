@@ -71,7 +71,7 @@ else
 	dmesg | grep -iE 'link up|Link Fail' | tail -2
 	have lspci && lspci -nn
 	if have lspci && [[ -n "$(lspci -d ::0108 2>/dev/null; lspci -d 1e60: 2>/dev/null)" ]]; then
-		lnk="$(lspci -vv 2>/dev/null | grep -m1 -E 'LnkSta:' | sed 's/^\s*//')"
+		lnk="$(lspci -vv 2>/dev/null | grep -m1 -E 'LnkSta:' | tr -s ' \t' ' ' | sed 's/^ //')"
 		result PASS "pcie" "${lnk}"
 	elif have lspci && [[ "$(lspci | wc -l)" -gt 1 ]]; then
 		result PASS "pcie" "link up, unknown device"
@@ -172,7 +172,7 @@ n="$(lsusb 2>/dev/null | grep -vc 'root hub')"
 [[ "${n}" -gt 0 ]] && result PASS "usb" "${n} device(s)" || result SKIP "usb" "nothing plugged in"
 if iw dev 2>/dev/null | grep -q Interface; then
 	iw dev | grep -E 'Interface|ssid'
-	result PASS "wifi" "$(iw dev | awk '/Interface/{print $2}' | tr '\n' ' ')"
+	result PASS "wifi" "$(iw dev | awk '/Interface/{print $2}' | xargs)"
 else
 	result SKIP "wifi" "no WiFi adapter"
 fi
@@ -182,7 +182,7 @@ st="$(cat /sys/class/drm/card*-HDMI*/status 2>/dev/null | head -1)"
 [[ "${st}" == connected ]] && result PASS "hdmi" "connected (check the picture)" || result SKIP "hdmi" "${st:-no HDMI connector}"
 
 section "Packages"
-held="$(apt-mark showhold | tr '\n' ' ')"
+held="$(apt-mark showhold | xargs)"
 echo "${held}"
 echo "${held}" | grep -q 'linux-image' && result PASS "kernel held" "${held}" || result FAIL "kernel held" "kernel/DTB not on hold"
 

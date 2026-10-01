@@ -40,20 +40,33 @@ Each check prints its details and a `PASS`, `FAIL` or `SKIP` line, and a summary
 | Check | Kray-SoM-RKC, vendor | Kray-SoM-RKC, current | LubanCat Zero N |
 |---|---|---|---|
 | boot | `6.1.x-vendor-rk35xx` | `6.18.x-current-rockchip64` | as the image |
-| ethernet | `end1`, RTL8211F at `stmmac-1:01`, 1000 Mb/s, ping | `end0`, 1000 Mb/s | 1000 Mb/s, PHY at address 0 |
+| ethernet | `end0`, RTL8211F at `stmmac-1:01`, 1000 Mb/s, ping | `end0`, 1000 Mb/s | `end1` (vendor) / `end0`, 1000 Mb/s, PHY at address 0 |
 | pcie | `LnkSta: Speed 5GT/s, Width x1` with a card | same | SKIP |
-| nvme | read ~380 MB/s (Gen2 x1 limit ~400) | same | SKIP |
+| nvme | read ~385 MB/s (Gen2 x1 limit ~400) | same | SKIP |
 | hailo driver / firmware / hailort | `hailo_pci 4.24.0` loads, firmware present, `HailoRT-CLI version 4.24.0` | same | same (no device) |
 | hailo device | `fw-control identify` OK with a Hailo-8, else SKIP | same | SKIP |
-| npu | best ~4.2-4.5 ms, dog = class 156 | SKIP | best ~4.5 ms |
-| video | encode ≥ 50 fps (CPU-bound test source), transcode ~65 fps, `mppvideodec` 300 frames in ~0.7 s | `v4l2slh264dec` decode (needs a software encoder for the test file) | as Kray |
+| npu | best ~4.2 ms, dog = class 156 | SKIP | best ~4.5 ms |
+| video | encode ~53 fps (CPU-bound test source), transcode ~67 fps, `mppvideodec` 300 frames in ~0.66 s | `v4l2slh264dec` decode (needs a software encoder for the test file) | as Kray |
 | crypto engine | `rk-crypto` registered | not checked | as Kray |
 | hw rng disabled | `rng_available` empty | same | same |
 | usb / wifi | hub, RTL8153, RTL8821AU (`wlx…`) | same | same |
 | hdmi | `connected` | same | same |
 | kernel held | `linux-image-…` and `linux-dtb-…` on hold | same | same |
 
-Then look through the "Kernel errors" section. Known harmless lines on the vendor kernel: `dw-pcie ... probe failed with error -22` (rk-pcie takes the node), `rk-crypto ... invalid resource`, `rockchip-vop2 ... no regulator (vop) found`, `dwhdmi-rockchip ... IRQ index 1 not found`, GPT warnings before the first resize.
+Then look through the "Kernel errors" section. Lines that are known and harmless on the vendor kernel (seen on a fully working board):
+
+- `dw-pcie 3c0000000.pcie: invalid resource` / `Failed to initialize host` (the generic driver gives up, `rk-pcie` takes the node)
+- `arm-scmi firmware:scmi: Failed. SCMI protocol 22 not active.` / `protocol 17`
+- `rockchip-vop2 ... no regulator (vop) found`, `failed to set opp config`, `failed to init opp info`
+- `dwhdmi-rockchip ... IRQ index 1 not found`
+- `rk817-battery` / `rk817-charger: Failed to find matching dt id`
+- `rk-crypto ... invalid resource`
+- `Failed to get leakage` (bus-npu, rkvenc), `shared_niu_a/h is not found`, `No niu aclk/hclk reset resource define`
+- `rockchip-dmc dmc: failed to get vop pn to msch rl`
+- `RKNPU fde40000.npu: can't request region ...` and `IRQ npu_irq not found` (the NPU still works; the npu check covers it)
+- GPT warnings before the first filesystem resize
+
+Anything else is worth a closer look.
 
 ## 3. Manual checks
 
