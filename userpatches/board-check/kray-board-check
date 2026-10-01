@@ -140,6 +140,14 @@ elif [[ "${BRANCH}" == vendor ]]; then
 	[[ -s "${WORK}/t2.mp4" ]] && result PASS "h264 transcode (mpp)" "${tr// /}" || result FAIL "h264 transcode (mpp)"
 	dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
 	[[ -n "${dec}" ]] && result PASS "h264 decode (mppvideodec)" "300 frames, ${dec#*after }" || result FAIL "h264 decode (mppvideodec)"
+	enc5="$(ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 10 \
+		-pix_fmt nv12 -c:v hevc_rkmpp -b:v 6M -y "${WORK}/t5.mp4" -stats 2>&1 | tr '\r' '\n' | grep -o 'fps=[ 0-9.]*' | tail -1)"
+	[[ -s "${WORK}/t5.mp4" ]] && result PASS "h265 encode (mpp)" "${enc5// /}" || result FAIL "h265 encode (mpp)"
+	tr5="$(ffmpeg -hide_banner -loglevel error -i "${WORK}/t.mp4" -c:v hevc_rkmpp -b:v 6M -y "${WORK}/t6.mp4" \
+		-stats 2>&1 | tr '\r' '\n' | grep -o 'fps=[ 0-9.]*' | tail -1)"
+	[[ -s "${WORK}/t6.mp4" ]] && result PASS "h264 to h265 transcode (mpp)" "${tr5// /}" || result FAIL "h264 to h265 transcode (mpp)"
+	dec5="$(gst-launch-1.0 filesrc location="${WORK}/t5.mp4" ! qtdemux ! h265parse ! mppvideodec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+	[[ -n "${dec5}" ]] && result PASS "h265 decode (mppvideodec)" "300 frames, ${dec5#*after }" || result FAIL "h265 decode (mppvideodec)"
 else
 	# Mainline has no hardware encoder: make the test stream with a software one.
 	enc=""
@@ -154,6 +162,14 @@ else
 			! ${enc} ${opts} ! h264parse ! mp4mux ! filesink location="${WORK}/t.mp4" 2>/dev/null
 		dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! v4l2slh264dec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
 		[[ -n "${dec}" ]] && result PASS "h264 decode (v4l2slh264dec)" "300 frames, ${dec#*after }" || result FAIL "h264 decode (v4l2slh264dec)"
+	fi
+	if gst-inspect-1.0 x265enc >/dev/null 2>&1; then
+		gst-launch-1.0 -q videotestsrc num-buffers=300 ! video/x-raw,width=1920,height=1080,format=I420 \
+			! x265enc speed-preset=ultrafast ! h265parse ! mp4mux ! filesink location="${WORK}/t5.mp4" 2>/dev/null
+		dec5="$(gst-launch-1.0 filesrc location="${WORK}/t5.mp4" ! qtdemux ! h265parse ! v4l2slh265dec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+		[[ -n "${dec5}" ]] && result PASS "h265 decode (v4l2slh265dec)" "300 frames, ${dec5#*after }" || result FAIL "h265 decode (v4l2slh265dec)"
+	else
+		result SKIP "h265 decode (v4l2slh265dec)" "no x265enc (GStreamer x265 plugin) to make the test file"
 	fi
 fi
 
