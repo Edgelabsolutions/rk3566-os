@@ -33,7 +33,7 @@ Two kernel branches are supported:
 | DDR3L / LPDDR4X, U-Boot, RK809 PMIC | ✅ | ✅ |
 | microSD (High Speed, 50 MHz) | ✅ | ✅ |
 | Ethernet 1 Gbps | ✅ | ✅ |
-| PCIe 2.0 x1 (M.2) | ❔ to be verified | ❔ to be verified |
+| PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
