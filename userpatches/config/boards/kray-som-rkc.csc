@@ -127,3 +127,52 @@ function post_customize_image__kray_som_rkc_multimedia() {
 	rm -rf "${SDCARD}/tmp/kray-multimedia"
 	chroot_sdcard ldconfig
 }
+
+# Hailo-8 AI accelerator on the M.2 PCIe slot (all branches).
+# scripts/fetch-hailo.sh stages hailort-drivers 4.24.0 and the firmware in
+# userpatches/hailo; scripts/build-hailort.sh builds the HailoRT .deb.
+#
+# The driver is built in-tree as a module: the sources go to drivers/misc/hailo
+# here, after patching (patching resets the tree) and before olddefconfig.
+function custom_kernel_config__kray_som_rkc_hailo_pci() {
+	kernel_config_modifying_hashes+=("hailo_pci=4.24.0-5d9ce88")
+	[[ -f .config ]] || return 0
+
+	local src="${USERPATCHES_PATH}/hailo"
+	local dst="${kernel_work_dir}/drivers/misc/hailo"
+	[[ -d "${src}/driver/common" ]] || exit_with_error "Hailo driver sources missing" "run scripts/fetch-hailo.sh"
+
+	rm -rf "${dst}"
+	mkdir -p "${dst}"
+	cp -a "${src}/driver/common" "${src}/driver/linux" "${dst}/"
+	cp "${src}/kernel/Kconfig" "${src}/kernel/Makefile" "${dst}/"
+	if ! grep -q 'drivers/misc/hailo/Kconfig' "${kernel_work_dir}/drivers/misc/Kconfig"; then
+		sed -i '$ s|^endmenu$|source "drivers/misc/hailo/Kconfig"\nendmenu|' "${kernel_work_dir}/drivers/misc/Kconfig"
+		grep -q 'drivers/misc/hailo/Kconfig' "${kernel_work_dir}/drivers/misc/Kconfig" ||
+			exit_with_error "Could not hook the Hailo driver into drivers/misc/Kconfig"
+	fi
+	if ! grep -q 'CONFIG_HAILO_PCI' "${kernel_work_dir}/drivers/misc/Makefile"; then
+		echo 'obj-$(CONFIG_HAILO_PCI)	+= hailo/' >> "${kernel_work_dir}/drivers/misc/Makefile"
+	fi
+	opts_m+=("HAILO_PCI")
+}
+
+# Firmware (redistributed in binary form with Hailo's EULA), device node
+# permissions, module options and the HailoRT runtime (libhailort, hailortcli).
+function post_customize_image__kray_som_rkc_hailo() {
+	local src="${USERPATCHES_PATH}/hailo"
+	display_alert "$BOARD" "Installing Hailo-8 firmware and HailoRT" "info"
+	install -D -m 0644 "${src}/firmware/hailo8_fw.bin" "${SDCARD}/lib/firmware/hailo/hailo8_fw.bin"
+	install -D -m 0644 "${src}/firmware/EULA" "${SDCARD}/lib/firmware/hailo/EULA"
+	install -D -m 0644 "${src}/driver/51-hailo-udev.rules" "${SDCARD}/etc/udev/rules.d/51-hailo-udev.rules"
+	install -D -m 0644 "${src}/driver/hailo_pci.conf" "${SDCARD}/etc/modprobe.d/hailo_pci.conf"
+	if ! compgen -G "${src}/*.deb" > /dev/null; then
+		display_alert "$BOARD" "No HailoRT package in ${src}; run scripts/build-hailort.sh" "wrn"
+		return 0
+	fi
+	mkdir -p "${SDCARD}/tmp/kray-hailo"
+	cp "${src}"/*.deb "${SDCARD}/tmp/kray-hailo/"
+	chroot_sdcard dpkg -i /tmp/kray-hailo/*.deb
+	rm -rf "${SDCARD}/tmp/kray-hailo"
+	chroot_sdcard ldconfig
+}
