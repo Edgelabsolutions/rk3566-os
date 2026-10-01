@@ -19,6 +19,11 @@
 
 / {
 	aliases {
+		/*
+		 * rk356x.dtsi also names gmac1 ethernet1; with two aliases for
+		 * one controller udev picks either end0 or end1. Keep one.
+		 */
+		/delete-property/ ethernet1;
 		ethernet0 = &gmac1;
 		mmc0 = &sdhci;
 		mmc1 = &sdmmc0;

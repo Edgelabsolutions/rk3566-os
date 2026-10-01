@@ -41,7 +41,7 @@ Each check prints its details and a `PASS`, `FAIL` or `SKIP` line, and a summary
 | Check | Kray-SoM-RKC, vendor | Kray-SoM-RKC, current | LubanCat Zero N |
 |---|---|---|---|
 | boot | `6.1.x-vendor-rk35xx` | `6.18.x-current-rockchip64` | as the image |
-| ethernet | `end0`, RTL8211F at `stmmac-1:01`, 1000 Mb/s, ping | `end0`, 1000 Mb/s | `end1` (vendor) / `end0`, 1000 Mb/s, PHY at address 0 |
+| ethernet | `end0`, RTL8211F at `stmmac-1:01`, 1000 Mb/s, ping | `end0`, 1000 Mb/s | `end0`, 1000 Mb/s, PHY at address 0 |
 | pcie | `LnkSta: Speed 5GT/s, Width x1` with a card | same | SKIP |
 | nvme | read ~385 MB/s (Gen2 x1 limit ~400) | same | SKIP |
 | hailo driver / firmware / hailort | `hailo_pci 4.24.0` loads, firmware present, `HailoRT-CLI version 4.24.0` | same | same (no device) |
@@ -88,7 +88,7 @@ Board / image / kernel: Kray-SoM-RKC, kray-som-rkc-os-v1.5-trixie-vendor-6.1.172
 
 | Check | Result |
 |---|---|
-| ethernet | PASS, end1 1000Mb/s |
+| ethernet | PASS, end0 1000Mb/s |
 | ...      | ...  |
 ```
 
