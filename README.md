@@ -83,6 +83,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame. Converting and running your own models: [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md#npu).
+- Hardware smoke test: `sudo kray-board-check` (PASS / FAIL / SKIP per subsystem). Test plan and expected values: [docs/testing.md](docs/testing.md).
 - Moving the system to eMMC (on boards that have it): `armbian-install`.
 
 ### Hardware video codecs
@@ -135,6 +136,7 @@ userpatches/
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
   hailo/kernel/                            Kconfig/Makefile to build hailo_pci in-tree
+  board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
 ```
 
 ## Technical notes

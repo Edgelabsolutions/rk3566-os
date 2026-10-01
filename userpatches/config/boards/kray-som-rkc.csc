@@ -176,3 +176,12 @@ function post_customize_image__kray_som_rkc_hailo() {
 	rm -rf "${SDCARD}/tmp/kray-hailo"
 	chroot_sdcard ldconfig
 }
+
+# Hardware smoke test (docs/testing.md): sudo kray-board-check
+function post_family_config__kray_som_rkc_board_check_packages() {
+	add_packages_to_image pciutils ethtool iw
+}
+
+function post_customize_image__kray_som_rkc_board_check() {
+	install -D -m 0755 "${USERPATCHES_PATH}/board-check/kray-board-check" "${SDCARD}/usr/bin/kray-board-check"
+}
