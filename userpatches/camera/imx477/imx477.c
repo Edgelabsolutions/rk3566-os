@@ -3,8 +3,9 @@
  * Kray-SoM-RKC OS: Raspberry Pi's imx477 driver (raspberrypi/linux rpi-6.1.y,
  * commit f4102d30e760) for the Rockchip vendor kernel. Changes: added
  * get_mbus_config and g_frame_interval for the Rockchip CSI-2 D-PHY and
- * ISP drivers; the sony,imx378 compatible is dropped so it does not
- * compete with Rockchip's imx378 driver.
+ * ISP drivers, RKMODULE_GET_MODULE_INFO and Rockchip subdev naming for
+ * rkaiq; the sony,imx378 compatible is dropped so it does not compete with
+ * Rockchip's imx378 driver.
  */
 /*
  * A V4L2 driver for Sony IMX477 cameras.
@@ -27,6 +28,7 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-mediabus.h>
+#include <linux/rk-camera-module.h>
 
 static int dpc_enable = 1;
 module_param(dpc_enable, int, 0644);
@@ -1115,6 +1117,12 @@ struct imx477 {
 	struct v4l2_subdev sd;
 	struct media_pad pad[NUM_PADS];
 
+	/* Rockchip camera module description, for rkaiq's IQ file lookup */
+	u32 module_index;
+	const char *module_facing;
+	const char *module_name;
+	const char *len_name;
+
 	unsigned int fmt_code;
 
 	struct clk *xclk;
@@ -1966,9 +1974,34 @@ static int imx477_identify_module(struct imx477 *imx477, u32 expected_id)
 	return 0;
 }
 
+/*
+ * Rockchip's 3A library (rkaiq) identifies the sensor, module and lens with
+ * RKMODULE_GET_MODULE_INFO to pick its tuning file
+ * (<sensor>_<module>_<lens>.json).
+ */
+static long imx477_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+{
+	struct imx477 *imx477 = to_imx477(sd);
+	struct rkmodule_inf *inf;
+
+	switch (cmd) {
+	case RKMODULE_GET_MODULE_INFO:
+		inf = arg;
+		memset(inf, 0, sizeof(*inf));
+		strscpy(inf->base.sensor, "imx477", sizeof(inf->base.sensor));
+		strscpy(inf->base.module, imx477->module_name,
+			sizeof(inf->base.module));
+		strscpy(inf->base.lens, imx477->len_name, sizeof(inf->base.lens));
+		return 0;
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
 static const struct v4l2_subdev_core_ops imx477_core_ops = {
 	.subscribe_event = v4l2_ctrl_subdev_subscribe_event,
 	.unsubscribe_event = v4l2_event_subdev_unsubscribe,
+	.ioctl = imx477_ioctl,
 };
 
 /*
@@ -2238,6 +2271,20 @@ static int imx477_probe(struct i2c_client *client)
 
 	v4l2_i2c_subdev_init(&imx477->sd, client, &imx477_subdev_ops);
 
+	/* Optional Rockchip module description; defaults keep rkaiq usable */
+	if (of_property_read_u32(dev->of_node, RKMODULE_CAMERA_MODULE_INDEX,
+				 &imx477->module_index))
+		imx477->module_index = 0;
+	if (of_property_read_string(dev->of_node, RKMODULE_CAMERA_MODULE_FACING,
+				    &imx477->module_facing))
+		imx477->module_facing = "back";
+	if (of_property_read_string(dev->of_node, RKMODULE_CAMERA_MODULE_NAME,
+				    &imx477->module_name))
+		imx477->module_name = "default";
+	if (of_property_read_string(dev->of_node, RKMODULE_CAMERA_LENS_NAME,
+				    &imx477->len_name))
+		imx477->len_name = "default";
+
 	match = of_match_device(imx477_dt_ids, dev);
 	if (!match)
 		return -ENODEV;
@@ -2316,6 +2363,12 @@ static int imx477_probe(struct i2c_client *client)
 		dev_err(dev, "failed to init entity pads: %d\n", ret);
 		goto error_handler_free;
 	}
+
+	/* Rockchip naming: m<index>_<b|f>_<sensor> <i2c device> */
+	snprintf(imx477->sd.name, sizeof(imx477->sd.name), "m%02u_%s_imx477 %s",
+		 imx477->module_index,
+		 strcmp(imx477->module_facing, "back") ? "f" : "b",
+		 dev_name(imx477->sd.dev));
 
 	ret = v4l2_async_register_subdev_sensor(&imx477->sd);
 	if (ret < 0) {

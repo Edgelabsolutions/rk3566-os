@@ -203,6 +203,24 @@ function custom_kernel_config__kray_som_rkc_imx477() {
 	opts_y+=("VIDEO_IMX477")
 }
 
+# Rockchip's camera 3A engine for the vendor image (scripts/build-rkaiq.sh):
+# librkaiq, rkaiq_3A_server with its service (started only with the
+# kray-som-rkc-imx477 overlay) and the IMX477 tuning file.
+function post_customize_image__kray_som_rkc_rkaiq() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/camera"
+	if ! compgen -G "${src}/camera-engine-rkaiq_*.deb" > /dev/null; then
+		display_alert "$BOARD" "No rkaiq package in ${src}; run scripts/build-rkaiq.sh" "wrn"
+		return 0
+	fi
+	display_alert "$BOARD" "Installing the rkaiq camera 3A engine" "info"
+	mkdir -p "${SDCARD}/tmp/kray-rkaiq"
+	cp "${src}"/camera-engine-rkaiq_*.deb "${SDCARD}/tmp/kray-rkaiq/"
+	chroot_sdcard dpkg -i /tmp/kray-rkaiq/*.deb
+	rm -rf "${SDCARD}/tmp/kray-rkaiq"
+	chroot_sdcard ldconfig
+}
+
 # Firmware (redistributed in binary form with Hailo's EULA), device node
 # permissions, module options and the HailoRT runtime (libhailort, hailortcli).
 function post_customize_image__kray_som_rkc_hailo() {
