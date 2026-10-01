@@ -8,7 +8,7 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 |---|---|
 | Overlay | `/boot/dtb/rockchip/overlay/kray-som-rkc-imx219.dtbo` (source: `userpatches/overlay/rk35xx-vendor-6.1/kray-som-rkc-imx219.dts`) |
 | Sensor | I2C1, address `0x10`, 2 CSI-2 lanes on `csi2_dphy0` |
-| Camera enable | GPIO0_C3 held high by the overlay (CAM_GPIO on the Raspberry Pi pinout) |
+| Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
 | Kernel | `imx219` driver, CSI-2 D-PHY, `rkisp` (ISP v2.1) built into the vendor kernel |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 

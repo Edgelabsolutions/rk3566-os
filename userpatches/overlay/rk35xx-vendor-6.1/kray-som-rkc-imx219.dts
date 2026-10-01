@@ -8,9 +8,10 @@
  *
  * Sensor on I2C1 at 0x10, two MIPI CSI-2 lanes through csi2_dphy0 into
  * rkisp (rkisp_vir0). The module has its own 24 MHz oscillator; the fixed
- * clock below only describes it. GPIO0_C3 is the connector's camera enable
- * (CAM_GPIO on the Raspberry Pi pinout); the vendor imx219 driver does not
- * drive it, so it is held high here.
+ * clock below only describes it. The camera's power-down (GPIO2_C0) and
+ * reset (GPIO2_C1) lines are held high here: the vendor imx219 driver does
+ * not drive them. Pins as in the overlay used with LubanCat OS on this
+ * board.
  */
 
 /dts-v1/;
@@ -35,13 +36,14 @@
 	};
 
 	fragment@1 {
-		target = <&gpio0>;
+		target = <&gpio2>;
 		__overlay__ {
 			kray-camera-enable-hog {
 				gpio-hog;
-				gpios = <RK_PC3 GPIO_ACTIVE_HIGH>;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
 				output-high;
-				line-name = "camera-enable";
+				line-name = "camera-pdn", "camera-reset";
 			};
 		};
 	};
