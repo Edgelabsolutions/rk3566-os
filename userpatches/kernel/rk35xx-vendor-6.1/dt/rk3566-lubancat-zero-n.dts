@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * EmbedFire LubanCat Zero N: the reference board Kray-SoM-RKC is derived
+ * from. Same SoC, PMIC and peripherals; the Ethernet PHY is wired
+ * differently (MDIO address 0, reset on GPIO2_B0, RGMII clock from the SoC)
+ * and there is no PCIe slot.
+ */
+
+/dts-v1/;
+#include "rk3566-kray-som-rkc.dtsi"
+
+/ {
+	model = "EmbedFire LubanCat Zero N";
+	compatible = "embedfire,lubancat-zero-n", "rockchip,rk3566";
+};
+
+/* Ethernet: RGMII PHY (JLSemi JL2101 or RTL8211F depending on revision) */
+&gmac1 {
+	phy-mode = "rgmii";
+	clock_in_out = "output";
+
+	snps,reset-gpio = <&gpio2 RK_PB0 GPIO_ACTIVE_LOW>;
+	snps,reset-active-low;
+	/* Reset time is 75ms, 100ms */
+	snps,reset-delays-us = <0 75000 100000>;
+
+	assigned-clocks = <&cru SCLK_GMAC1_RX_TX>, <&cru SCLK_GMAC1>;
+	assigned-clock-parents = <&cru SCLK_GMAC1_RGMII_SPEED>, <&cru CLK_MAC1_2TOP>;
+	assigned-clock-rates = <0>, <125000000>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&gmac1m1_miim
+		     &gmac1m1_tx_bus2_level3
+		     &gmac1m1_rx_bus2
+		     &gmac1m1_rgmii_clk_level2
+		     &gmac1m1_rgmii_bus_level3>;
+
+	tx_delay = <0x24>;
+	rx_delay = <0x08>;
+
+	phy-handle = <&rgmii_phy1>;
+	status = "okay";
+};
+
+&mdio1 {
+	rgmii_phy1: phy@0 {
+		compatible = "ethernet-phy-ieee802.3-c22";
+		reg = <0x0>;
+	};
+};
