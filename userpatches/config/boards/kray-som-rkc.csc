@@ -100,7 +100,8 @@ function post_customize_image__kray_som_rkc_hold_kernel() {
 
 # Hardware video codecs.
 #  vendor:  Rockchip MPP stack built by scripts/build-multimedia.sh
-#           (userpatches/multimedia/*.deb) plus the GStreamer runtime it needs.
+#           (userpatches/multimedia/*.deb) plus the GStreamer runtime it needs
+#           and v4l-utils for the camera.
 #  current: mainline V4L2 stateless decoders (hantro, rkvdec) through
 #           GStreamer v4l2codecs from Debian, plus v4l-utils.
 function post_family_config__kray_som_rkc_multimedia_packages() {
@@ -108,7 +109,7 @@ function post_family_config__kray_som_rkc_multimedia_packages() {
 	add_packages_to_image gstreamer1.0-tools gstreamer1.0-plugins-base \
 		gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
 	case "${BRANCH}" in
-		vendor) add_packages_to_image libdrm2 ;;
+		vendor) add_packages_to_image libdrm2 v4l-utils ;;
 		current) add_packages_to_image v4l-utils ;;
 	esac
 }
@@ -155,6 +156,27 @@ function custom_kernel_config__kray_som_rkc_hailo_pci() {
 		echo 'obj-$(CONFIG_HAILO_PCI)	+= hailo/' >> "${kernel_work_dir}/drivers/misc/Makefile"
 	fi
 	opts_m+=("HAILO_PCI")
+}
+
+# Optional hardware as device tree overlays for the vendor kernel, built with
+# the kernel into /boot/dtb/rockchip/overlay and enabled with
+# overlays=<name> in /boot/armbianEnv.txt (see userpatches/overlay/).
+# The overlay Makefile expands dtbo-y with ':=' at "always-y", so the
+# entries go in before the "targets" line.
+function custom_kernel_config__kray_som_rkc_overlays() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/overlay/rk35xx-vendor-6.1"
+	kernel_config_modifying_hashes+=("kray_overlays=$(cat "${src}"/*.dts | sha256sum | cut -c1-16)")
+	[[ -f .config ]] || return 0
+
+	local dst="${kernel_work_dir}/arch/arm64/boot/dts/rockchip/overlay" f name
+	for f in "${src}"/*.dts; do
+		name="$(basename "${f}" .dts)"
+		cp "${f}" "${dst}/"
+		grep -q "${name}.dtbo" "${dst}/Makefile" ||
+			sed -i "/^targets += \$(dtbo-y)/i dtbo-\$(CONFIG_ARCH_ROCKCHIP) += ${name}.dtbo\n" "${dst}/Makefile"
+		grep -q "${name}.dtbo" "${dst}/Makefile" || exit_with_error "Could not add overlay ${name} to ${dst}/Makefile"
+	done
 }
 
 # Firmware (redistributed in binary form with Hailo's EULA), device node

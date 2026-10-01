@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: Sony IMX219 camera module (Raspberry Pi Camera v2 type) on
+ * the CSI connector. Vendor kernel only: the RK3566 ISP and CSI receiver
+ * have no mainline driver.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-imx219
+ *
+ * Sensor on I2C1 at 0x10, two MIPI CSI-2 lanes through csi2_dphy0 into
+ * rkisp (rkisp_vir0). The module has its own 24 MHz oscillator; the fixed
+ * clock below only describes it. GPIO0_C3 is the connector's camera enable
+ * (CAM_GPIO on the Raspberry Pi pinout); the vendor imx219 driver does not
+ * drive it, so it is held high here.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			kray_cam_clk: kray-camera-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <24000000>;
+				clock-output-names = "kray_cam_clk";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio0>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				gpios = <RK_PC3 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-enable";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx219: imx219@10 {
+				compatible = "sony,imx219";
+				reg = <0x10>;
+				clocks = <&kray_cam_clk>;
+				clock-names = "xvclk";
+				rockchip,camera-module-index = <0>;
+				rockchip,camera-module-facing = "back";
+				rockchip,camera-module-name = "default";
+				rockchip,camera-module-lens-name = "default";
+
+				port {
+					imx219_out: endpoint {
+						remote-endpoint = <&dphy0_in_imx219>;
+						data-lanes = <1 2>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_imx219: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&imx219_out>;
+						data-lanes = <1 2>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};

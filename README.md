@@ -35,6 +35,7 @@ Two kernel branches are supported:
 | Ethernet 1 Gbps | ✅ | ✅ |
 | PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
 | Hailo-8 (M.2), HailoRT 4.24.0 | ❔ built, not tested on hardware | ❔ built, not tested on hardware |
+| IMX219 camera (CSI-2), overlay `kray-som-rkc-imx219` | ❔ overlay built, not tested with a camera | ❌ no mainline ISP/CSI driver for RK3566 |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
@@ -109,7 +110,7 @@ ffmpeg -c:v h264_rkmpp -i in.mp4 -c:v hevc_rkmpp -b:v 4M out.mkv
 gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false
 ```
 
-See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image, [docs/hailo.md](docs/hailo.md) for the Hailo-8 accelerator on both images, and [docs/vendor-crypto.md](docs/vendor-crypto.md) for the crypto engine, its benchmark against the CPU crypto instructions, and the disabled TRNG.
+See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image, [docs/hailo.md](docs/hailo.md) for the Hailo-8 accelerator on both images, [docs/camera.md](docs/camera.md) for the IMX219 camera (vendor), and [docs/vendor-crypto.md](docs/vendor-crypto.md) for the crypto engine, its benchmark against the CPU crypto instructions, and the disabled TRNG.
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
@@ -139,6 +140,7 @@ userpatches/
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
   hailo/kernel/                            Kconfig/Makefile to build hailo_pci in-tree
+  overlay/rk35xx-vendor-6.1/               vendor device tree overlays (IMX219 camera)
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
 ```
 
