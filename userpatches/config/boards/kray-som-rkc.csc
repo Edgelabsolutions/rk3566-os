@@ -179,6 +179,28 @@ function custom_kernel_config__kray_som_rkc_overlays() {
 	done
 }
 
+# Sony IMX477 (Raspberry Pi HQ Camera) for the vendor kernel: Raspberry Pi's
+# driver with the calls Rockchip's CSI-2 D-PHY and ISP need
+# (userpatches/camera/imx477), built as a module next to the other sensors.
+# Used by the kray-som-rkc-imx477 overlay.
+function custom_kernel_config__kray_som_rkc_imx477() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/camera/imx477"
+	kernel_config_modifying_hashes+=("imx477=$(cat "${src}"/* | sha256sum | cut -c1-16)")
+	[[ -f .config ]] || return 0
+
+	local dir="${kernel_work_dir}/drivers/media/i2c"
+	cp "${src}/imx477.c" "${dir}/"
+	if ! grep -q 'config VIDEO_IMX477' "${dir}/Kconfig"; then
+		sed -i "/^config VIDEO_IMX378$/e cat ${src}/Kconfig" "${dir}/Kconfig"
+		grep -q 'config VIDEO_IMX477' "${dir}/Kconfig" ||
+			exit_with_error "Could not add VIDEO_IMX477 to ${dir}/Kconfig"
+	fi
+	grep -q 'CONFIG_VIDEO_IMX477' "${dir}/Makefile" ||
+		echo 'obj-$(CONFIG_VIDEO_IMX477) += imx477.o' >> "${dir}/Makefile"
+	opts_m+=("VIDEO_IMX477")
+}
+
 # Firmware (redistributed in binary form with Hailo's EULA), device node
 # permissions, module options and the HailoRT runtime (libhailort, hailortcli).
 function post_customize_image__kray_som_rkc_hailo() {
@@ -201,7 +223,7 @@ function post_customize_image__kray_som_rkc_hailo() {
 
 # Hardware smoke test (docs/testing.md): sudo kray-board-check
 function post_family_config__kray_som_rkc_board_check_packages() {
-	add_packages_to_image pciutils ethtool iw
+	add_packages_to_image pciutils ethtool iw i2c-tools
 }
 
 function post_customize_image__kray_som_rkc_board_check() {

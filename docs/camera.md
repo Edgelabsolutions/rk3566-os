@@ -1,15 +1,22 @@
-# IMX219 camera (vendor image)
+# Cameras (vendor image)
 
-Kray-SoM-RKC has a MIPI CSI-2 connector for a Sony IMX219 module (Raspberry Pi Camera v2 type). The camera is not fitted on every board, so it is described by a device tree overlay that is off by default.
+Kray-SoM-RKC has a MIPI CSI-2 connector (four lanes routed) for Raspberry Pi style camera modules. A camera is not fitted on every board, so each supported module has a device tree overlay that is off by default. Enable one of them, not both:
+
+| Module | Sensor | Overlay | I2C address | Lanes used |
+|---|---|---|---|---|
+| Raspberry Pi Camera v2 | Sony IMX219, 8 MP | `kray-som-rkc-imx219` | `0x10` | 2 |
+| Raspberry Pi HQ Camera | Sony IMX477, 12.3 MP | `kray-som-rkc-imx477` | `0x1a` | 2 (the module's 15-pin cable carries two) |
+
+The IMX477 driver is Raspberry Pi's (`raspberrypi/linux` rpi-6.1.y), carried in `userpatches/camera/imx477` with the bus-configuration and frame-interval calls the Rockchip CSI-2 D-PHY and ISP drivers need, and built as the `imx477` module. Its modes: 4056x3040, 2028x1520, 2028x1080, 1332x990 (12/10-bit Bayer).
 
 Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no mainline driver.
 
 | Part | Where |
 |---|---|
-| Overlay | `/boot/dtb/rockchip/overlay/kray-som-rkc-imx219.dtbo` (source: `userpatches/overlay/rk35xx-vendor-6.1/kray-som-rkc-imx219.dts`) |
-| Sensor | I2C1, address `0x10`, 2 CSI-2 lanes on `csi2_dphy0` |
+| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-imx219.dtbo`, `kray-som-rkc-imx477.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
+| Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` |
 | Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
-| Kernel | `imx219` driver, CSI-2 D-PHY, `rkisp` (ISP v2.1) built into the vendor kernel |
+| Kernel | `imx219` (built in) and `imx477` (module) drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1) |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 
 ## Enable
@@ -17,18 +24,19 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 Connect the module with the board powered off, then add the overlay to `/boot/armbianEnv.txt` (append with a space if an `overlays=` line already exists) and reboot:
 
 ```bash
-echo "overlays=kray-som-rkc-imx219" | sudo tee -a /boot/armbianEnv.txt
+echo "overlays=kray-som-rkc-imx219" | sudo tee -a /boot/armbianEnv.txt     # or kray-som-rkc-imx477
 sudo reboot
 ```
 
-U-Boot prints `Applying kernel provided DT overlay kray-som-rkc-imx219.dtbo` on the serial console.
+U-Boot prints `Applying kernel provided DT overlay kray-som-rkc-<sensor>.dtbo` on the serial console.
 
 ## Check
 
 ```bash
-dmesg | grep -iE 'imx219|rkisp|csi2'
+dmesg | grep -iE 'imx219|imx477|rkisp|csi2'
+i2cdetect -y 1                   # 10 (IMX219) or 1a (IMX477) when the module is powered
 v4l2-ctl --list-devices          # rkisp_mainpath, rkisp_selfpath, ...
-media-ctl -d /dev/media0 -p      # imx219 -> csi2-dphy0 -> rkisp-isp-subdev -> rkisp_mainpath
+media-ctl -d /dev/media0 -p      # imx219/imx477 -> csi2-dphy0 -> rkisp-isp-subdev -> rkisp_mainpath
 ```
 
 ## Capture
@@ -54,4 +62,4 @@ On Rockchip SoCs auto exposure, white balance and the other 3A controls run in u
 
 ## Status
 
-The overlay applies to the Kray-SoM-RKC device tree and builds with the kernel. It has not been tested with a camera yet.
+Both overlays apply to the Kray-SoM-RKC device tree and build with the kernel; the `imx477` module builds against the vendor kernel. Neither has been confirmed with a camera yet.
