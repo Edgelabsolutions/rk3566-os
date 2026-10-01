@@ -18,6 +18,3 @@
 /userpatches/hailo/*.deb
 # written by HailoRT tools run on the build host
 /hailort.log
-
-# Rockchip camera 3A engine package (scripts/build-rkaiq.sh)
-/userpatches/camera/*.deb

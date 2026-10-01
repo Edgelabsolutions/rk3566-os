@@ -31,12 +31,6 @@ if ! compgen -G "${ROOT}/userpatches/hailo/*.deb" > /dev/null; then
 	"${ROOT}/scripts/build-hailort.sh"
 fi
 
-# Rockchip camera 3A engine (rkaiq) for the vendor image. Built once and
-# reused; delete userpatches/camera/*.deb to rebuild it.
-if ! compgen -G "${ROOT}/userpatches/camera/camera-engine-rkaiq_*.deb" > /dev/null; then
-	"${ROOT}/scripts/build-rkaiq.sh"
-fi
-
 echo "==> Syncing userpatches into armbian-build"
 mkdir -p "${ARMBIAN}/userpatches"
 cp -a "${ROOT}/userpatches/." "${ARMBIAN}/userpatches/"

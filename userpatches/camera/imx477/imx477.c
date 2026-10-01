@@ -1296,8 +1296,7 @@ static void imx477_set_default_format(struct imx477 *imx477)
 {
 	/*
 	 * Start in the 2028x1520 binned mode (up to 40 fps) rather than full
-	 * resolution: rkaiq prepares the ISP for the sensor mode it finds at
-	 * start-up, and its IMX477 tuning file is made for this mode.
+	 * resolution (10 fps), the usual choice for video on the RK3566 ISP.
 	 */
 	imx477->mode = &supported_modes_12bit[1];
 	imx477->fmt_code = MEDIA_BUS_FMT_SRGGB12_1X12;
