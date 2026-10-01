@@ -47,7 +47,7 @@ Each check prints its details and a `PASS`, `FAIL` or `SKIP` line, and a summary
 | hailo driver / firmware / hailort | `hailo_pci 4.24.0` loads, firmware present, `HailoRT-CLI version 4.24.0` | same | same (no device) |
 | hailo device | `fw-control identify` OK with a Hailo-8, else SKIP | same | SKIP |
 | npu | best ~4.2 ms, dog = class 156 | SKIP | best ~4.5 ms |
-| video | encode ~53 fps (CPU-bound test source), transcode ~67 fps, `mppvideodec` 300 frames in ~0.66 s | `v4l2slh264dec` decode (needs a software encoder for the test file) | as Kray |
+| video | H.264: encode ~53 fps (CPU-bound test source), transcode ~67 fps, `mppvideodec` 300 frames in ~0.66 s; H.265: encode ~55 fps (CPU-bound test source), H.264 → H.265 transcode ~68 fps, `mppvideodec` 300 frames in ~0.56 s | `v4l2slh264dec` / `v4l2slh265dec` decode (need a software encoder for the test file) | as Kray |
 | crypto engine | `rk-crypto` registered | not checked | as Kray |
 | hw rng disabled | `rng_available` empty | same | same |
 | usb / wifi | hub, RTL8153, RTL8821AU (`wlx…`) | same | same |

@@ -163,7 +163,7 @@ The vendor image ships the Rockchip MPP stack, built by `scripts/build-multimedi
 
 The hardware only handles 4:2:0 chroma. Streams encoded in 4:2:2 or 4:4:4 (for example High 4:4:4 H.264 from `x264` without `-pix_fmt yuv420p`) fail to decode in hardware.
 
-Measured on the board with 1080p H.264: decode ~270 fps in FFmpeg and ~450 fps in GStreamer, H.264 → H.265 transcode ~63 fps.
+Measured on the board with 1080p: H.264 decode ~270 fps in FFmpeg and ~450 fps in GStreamer; H.265 decode ~535 fps in GStreamer (300 frames in 0.56 s); H.264 → H.264 transcode ~67 fps and H.264 → H.265 ~68 fps (Kray-SoM-RKC, vendor 6.1.172).
 
 ### FFmpeg
 
