@@ -10,3 +10,11 @@
 
 # Rockchip multimedia packages and their build tree (scripts/build-multimedia.sh)
 /userpatches/multimedia/
+
+# Hailo-8 driver sources, firmware (Hailo EULA) and HailoRT package
+# (scripts/fetch-hailo.sh, scripts/build-hailort.sh)
+/userpatches/hailo/driver/
+/userpatches/hailo/firmware/
+/userpatches/hailo/*.deb
+# written by HailoRT tools run on the build host
+/hailort.log

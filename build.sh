@@ -17,11 +17,18 @@ if [[ ! -d "${ARMBIAN}/.git" ]]; then
 fi
 
 "${ROOT}/scripts/fetch-npu.sh"
+"${ROOT}/scripts/fetch-hailo.sh"
 
 # Rockchip MPP / RGA / FFmpeg / GStreamer packages for vendor images. Built once
 # and reused; delete userpatches/multimedia/*.deb to rebuild them.
 if ! compgen -G "${ROOT}/userpatches/multimedia/*.deb" > /dev/null; then
 	"${ROOT}/scripts/build-multimedia.sh"
+fi
+
+# HailoRT runtime for the Hailo-8 on the M.2 slot. Built once and reused;
+# delete userpatches/hailo/*.deb to rebuild it.
+if ! compgen -G "${ROOT}/userpatches/hailo/*.deb" > /dev/null; then
+	"${ROOT}/scripts/build-hailort.sh"
 fi
 
 echo "==> Syncing userpatches into armbian-build"

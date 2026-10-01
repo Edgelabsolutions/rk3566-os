@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0
+config HAILO_PCI
+	tristate "Hailo PCIe AI accelerator (Hailo-8, Hailo-8L, Hailo-8R)"
+	depends on PCI
+	help
+	  Driver for Hailo-8 family AI accelerators on PCIe, from
+	  hailo-ai/hailort-drivers. It loads the device firmware from
+	  /lib/firmware/hailo and exposes /dev/hailoN to HailoRT.
+
+	  The module is called hailo_pci.

@@ -34,6 +34,7 @@ Two kernel branches are supported:
 | microSD (High Speed, 50 MHz) | ✅ | ✅ |
 | Ethernet 1 Gbps | ✅ | ✅ |
 | PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
+| Hailo-8 (M.2), HailoRT 4.24.0 | ❔ built, not tested on hardware | ❔ built, not tested on hardware |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
@@ -104,7 +105,7 @@ ffmpeg -c:v h264_rkmpp -i in.mp4 -c:v hevc_rkmpp -b:v 4M out.mkv
 gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! mppvideodec ! fakesink sync=false
 ```
 
-See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image, and [docs/vendor-crypto.md](docs/vendor-crypto.md) for the crypto engine, its benchmark against the CPU crypto instructions, and the disabled TRNG.
+See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model conversion and inference, and for FFmpeg / GStreamer / MPP usage on the vendor image, [docs/hailo.md](docs/hailo.md) for the Hailo-8 accelerator on both images, and [docs/vendor-crypto.md](docs/vendor-crypto.md) for the crypto engine, its benchmark against the CPU crypto instructions, and the disabled TRNG.
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
@@ -122,6 +123,8 @@ To see the held packages: `apt-mark showhold`.
 build.sh                                   image build
 scripts/fetch-npu.sh                       RKNN SDK + NPU test
 scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
+scripts/fetch-hailo.sh                     Hailo-8 driver sources + firmware (4.24.0)
+scripts/build-hailort.sh                   HailoRT .deb (libhailort, hailortcli)
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
 docs/                                      vendor image guides (NPU, codecs, crypto)
 userpatches/
@@ -131,6 +134,7 @@ userpatches/
   kernel/archive/rockchip64-{6.18,7.0}/dt/ mainline DTS (experimental)
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
+  hailo/kernel/                            Kconfig/Makefile to build hailo_pci in-tree
 ```
 
 ## Technical notes
