@@ -92,6 +92,6 @@ For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 =
 ## Status
 
 - **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above (manual exposure).
-- **IMX219**: the overlay applies and builds; not yet tested with a module.
+- **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 (30 frames captured, 3110400 bytes each). Frame rate not measured yet.
 
 There is no auto exposure or white balance in either case, see above.
