@@ -101,7 +101,16 @@ v4l2-ctl -d $SD --list-ctrls                                  # ranges
 v4l2-ctl -d $SD --set-ctrl=exposure=1500,analogue_gain=600    # lines; gain register 0-978
 ```
 
-For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 = 2x, 768 = 4x, 978 = about 22x); exposure is in lines (in 2028x1520 mode one line is about 20 us). White balance and colour correction stay at the ISP defaults. For machine vision this is often enough; for natural colours, an application can correct white balance on the NV12 frames, or capture raw Bayer and process it itself.
+For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 = 2x, 768 = 4x, 978 = about 22x); exposure is in lines (in 2028x1520 mode one line is about 20 us). For the IMX219 use only the `gain` control: the vendor driver maps `gain` and `analogue_gain` to the same total gain (the one set last wins). Up to 2728 (10.66x) it is analogue gain; above that the driver adds digital gain, up to 43663. In the 1920x1080 mode a frame is 1766 lines, so `exposure` can go up to about 1760:
+
+```bash
+SD=$(media-ctl -d $MD -e "m00_b_imx219 1-0010")
+v4l2-ctl -d $SD -c exposure=1760 -c gain=5456      # 10.66x analogue x 2x digital
+```
+
+In ordinary room light `gain=5456` to `10912` (2x to 4x digital on top of full analogue gain) gives a normally exposed image at 30 fps; `2728` (analogue only) is somewhat dark.
+
+White balance and colour correction stay at the ISP defaults. For machine vision this is often enough; for natural colours, an application can correct white balance on the NV12 frames, or capture raw Bayer and process it itself.
 
 ## Status
 
