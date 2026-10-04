@@ -74,6 +74,20 @@ media-ctl -d $MD --set-v4l2 '"m00_b_imx477 1-001a":0[fmt:SRGGB12_1X12/4056x3040]
 
 The device numbers of `/dev/media*` and `/dev/video*` change when a USB camera is plugged in; the commands here find the ISP by name. The main path in the capture examples is `$(v4l2-ctl --list-devices | awk '/rkisp_mainpath/{getline; print $1; exit}')`.
 
+## Sensor mode (IMX219)
+
+The vendor `imx219` driver starts the sensor in the full 3280x2464 mode; the ISP scales to the size asked on the video node.
+
+| Sensor mode | Output (`rkisp_mainpath`, NV12) | Measured |
+|---|---|---|
+| 3280x2464 (default) | 1920x1080 | 21 fps |
+| 1920x1080 (centre crop, narrower field of view) | 1920x1080 | 30 fps |
+
+```bash
+MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
+media-ctl -d $MD --set-v4l2 '"m00_b_imx219 1-0010":0[fmt:SRGGB10_1X10/1920x1080]'
+```
+
 ## Image quality: no auto exposure or white balance
 
 On Rockchip SoCs auto exposure, auto white balance and the ISP's colour and noise tuning run in user space in Rockchip's `rkaiq`, with a tuning (IQ) file per sensor. The image does not include it: there is no tuning file for the IMX477 or the IMX219, and the `rkaiq` available for this kernel (AIQ v6.0x8.0) programmed the ISP once but did not run 3A on Kray-SoM-RKC.
@@ -92,6 +106,6 @@ For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 =
 ## Status
 
 - **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above (manual exposure).
-- **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 (30 frames captured, 3110400 bytes each). Frame rate not measured yet.
+- **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above (manual exposure).
 
 There is no auto exposure or white balance in either case, see above.
