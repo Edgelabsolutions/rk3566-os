@@ -21,14 +21,48 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 
 ## Enable
 
-Connect the module with the board powered off, then add the overlay to `/boot/armbianEnv.txt` (append with a space if an `overlays=` line already exists) and reboot:
+Overlays are listed on the `overlays=` line of `/boot/armbianEnv.txt`, separated by spaces, and applied by U-Boot at boot. Enable one camera overlay at a time: both use the same CSI-2 receiver and I2C bus. Connect the module with the board powered off.
+
+See what is enabled now:
 
 ```bash
-echo "overlays=kray-som-rkc-imx219" | sudo tee -a /boot/armbianEnv.txt     # or kray-som-rkc-imx477
+grep -E '^(overlays|user_overlays)=' /boot/armbianEnv.txt
+```
+
+The commands below remove any camera overlay that is already on the line, keep other overlays, and add the chosen one. They work with or without an existing `overlays=` line.
+
+### Raspberry Pi Camera v2 (IMX219)
+
+```bash
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-imx[0-9]*//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx219/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx219' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
 
-U-Boot prints `Applying kernel provided DT overlay kray-som-rkc-<sensor>.dtbo` on the serial console.
+### Raspberry Pi HQ Camera (IMX477)
+
+```bash
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-imx[0-9]*//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx477/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx477' | sudo tee -a /boot/armbianEnv.txt
+sudo reboot
+```
+
+### Switch cameras
+
+Power off, swap the module, boot, run the commands for the new camera and reboot once more. Booting with the wrong overlay does no harm: the sensor driver does not find its sensor on I2C and no camera appears.
+
+### Disable
+
+```bash
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-imx[0-9]*//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo reboot
+```
+
+### Notes
+
+- If you used your own camera overlay before (a `.dtbo` in `/boot/overlay-user/` listed on `user_overlays=`), remove it from that line: it would describe the same sensor a second time.
+- With a serial console (UART2, 1500000 8N1), U-Boot prints `Applying kernel provided DT overlay kray-som-rkc-<sensor>.dtbo` when the overlay is used. With a misspelt name that line is missing and the board boots without the camera.
+- The sensor mode, exposure and gain set with `media-ctl` / `v4l2-ctl` (see below) reset at every boot.
 
 ## Check
 
