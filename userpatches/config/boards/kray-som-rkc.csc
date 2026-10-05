@@ -267,7 +267,9 @@ function user_config__kray_som_rkc_demo() {
 
 function post_family_config__kray_som_rkc_demo_packages() {
 	[[ "${KRAY_DEMO:-no}" == "yes" ]] || return 0
-	add_packages_to_image fonts-dejavu-core overlayroot
+	# overlayroot's initramfs script needs grep, which the initramfs only has
+	# with busybox.
+	add_packages_to_image fonts-dejavu-core overlayroot busybox
 }
 
 function post_customize_image__kray_som_rkc_demo() {

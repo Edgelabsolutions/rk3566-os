@@ -44,7 +44,7 @@ What the demo image adds to the normal vendor image:
 | `kray-demo.service` | starts the demo at boot, restarts it if it stops |
 | `kray-demo-lockdown.service` | makes the root file system read-only after the first boot |
 | `overlays=kray-som-rkc-imx219` | camera overlay enabled in `/boot/armbianEnv.txt` |
-| packages | `fonts-dejavu-core`, `overlayroot` |
+| packages | `fonts-dejavu-core`, `overlayroot`, `busybox` (overlayroot's initramfs script needs its `grep`) |
 
 ## First boot
 
