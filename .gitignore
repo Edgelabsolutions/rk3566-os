@@ -18,3 +18,7 @@
 /userpatches/hailo/*.deb
 # written by HailoRT tools run on the build host
 /hailort.log
+
+# Exhibition demo: program and converted NPU model (scripts/build-demo.sh)
+/userpatches/demo/kray-demo
+/userpatches/demo/*.rknn

@@ -3,6 +3,7 @@
 #
 #   ./build.sh                 # vendor 6.1 kernel (default, NPU supported)
 #   ./build.sh BRANCH=current  # mainline 6.18, no NPU (experimental)
+#   ./build.sh KRAY_DEMO=yes   # exhibition demo image (vendor), see docs/demo.md
 #
 # Extra KEY=VALUE arguments are passed through to Armbian's compile.sh.
 set -euo pipefail
@@ -29,6 +30,11 @@ fi
 # delete userpatches/hailo/*.deb to rebuild it.
 if ! compgen -G "${ROOT}/userpatches/hailo/*.deb" > /dev/null; then
 	"${ROOT}/scripts/build-hailort.sh"
+fi
+
+# Exhibition demo image (./build.sh KRAY_DEMO=yes): program and NPU model.
+if [[ " $* " == *" KRAY_DEMO=yes "* ]]; then
+	"${ROOT}/scripts/build-demo.sh"
 fi
 
 echo "==> Syncing userpatches into armbian-build"

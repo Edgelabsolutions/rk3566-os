@@ -253,3 +253,44 @@ function post_customize_image__kray_som_rkc_network_first_login() {
 
 	ISSUE
 }
+
+# Exhibition demo image (KRAY_DEMO=yes, vendor only; see docs/demo.md): the
+# board boots straight into kray-demo (IMX219 camera on HDMI, people detection
+# on the NPU, CPU/NPU load). After the first boot has resized the file system,
+# the root file system becomes read-only with an overlay in RAM (overlayroot),
+# so pulling the power plug cannot damage the SD card.
+function user_config__kray_som_rkc_demo() {
+	[[ "${KRAY_DEMO:-no}" == "yes" ]] || return 0
+	[[ "${BRANCH}" == "vendor" ]] || exit_with_error "KRAY_DEMO=yes needs BRANCH=vendor (camera ISP and NPU)"
+	EXTRA_IMAGE_SUFFIXES+=("_demo")
+}
+
+function post_family_config__kray_som_rkc_demo_packages() {
+	[[ "${KRAY_DEMO:-no}" == "yes" ]] || return 0
+	add_packages_to_image fonts-dejavu-core overlayroot
+}
+
+function post_customize_image__kray_som_rkc_demo() {
+	[[ "${KRAY_DEMO:-no}" == "yes" ]] || return 0
+	local src="${USERPATCHES_PATH}/demo"
+	[[ -x "${src}/kray-demo" && -f "${src}/yolov8n-rk3566.rknn" ]] ||
+		exit_with_error "Demo files missing in ${src}: run scripts/build-demo.sh"
+	display_alert "$BOARD" "Installing the exhibition demo (kray-demo)" "info"
+	install -D -m 0755 "${src}/kray-demo" "${SDCARD}/usr/bin/kray-demo"
+	install -D -m 0644 "${src}/yolov8n-rk3566.rknn" "${SDCARD}/usr/share/kray-demo/yolov8n-rk3566.rknn"
+	install -D -m 0755 "${src}/files/kray-demo-start" "${SDCARD}/usr/lib/kray-demo/kray-demo-start"
+	install -D -m 0755 "${src}/files/kray-demo-lockdown" "${SDCARD}/usr/lib/kray-demo/kray-demo-lockdown"
+	install -D -m 0644 "${src}/files/kray-demo.service" "${SDCARD}/usr/lib/systemd/system/kray-demo.service"
+	install -D -m 0644 "${src}/files/kray-demo-lockdown.service" \
+		"${SDCARD}/usr/lib/systemd/system/kray-demo-lockdown.service"
+	install -D -m 0644 "${src}/files/kray-demo.conf" "${SDCARD}/etc/kray-demo.conf"
+	chroot_sdcard systemctl enable kray-demo.service kray-demo-lockdown.service
+
+	# Camera overlay on from the first boot.
+	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-imx[0-9]*//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+			"${SDCARD}/boot/armbianEnv.txt"
+	else
+		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"
+	fi
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Kray demo image: read-only root file system after the first boot
+After=armbian-resize-filesystem.service local-fs.target
+ConditionPathExists=!/etc/kray-demo/locked
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/kray-demo/kray-demo-lockdown
+
+[Install]
+WantedBy=multi-user.target
