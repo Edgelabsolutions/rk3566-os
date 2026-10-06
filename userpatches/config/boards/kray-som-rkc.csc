@@ -203,6 +203,17 @@ function custom_kernel_config__kray_som_rkc_imx477() {
 	opts_y+=("VIDEO_IMX477")
 }
 
+# Raspberry Pi Camera Module 3 (IMX708): the vendor tree has a Rockchip-style
+# imx708 driver that is off in the kernel config. Built in, like the other
+# camera drivers, so that it probes before the ISP stops waiting for sensors.
+# (Camera Module 1, OV5647, is already built in.)
+function custom_kernel_config__kray_som_rkc_imx708() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	kernel_config_modifying_hashes+=("imx708=y")
+	[[ -f .config ]] || return 0
+	opts_y+=("VIDEO_IMX708")
+}
+
 # Firmware (redistributed in binary form with Hailo's EULA), device node
 # permissions, module options and the HailoRT runtime (libhailort, hailortcli).
 function post_customize_image__kray_som_rkc_hailo() {
@@ -290,7 +301,7 @@ function post_customize_image__kray_som_rkc_demo() {
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
-		sed -i -e '/^overlays=/s/ *kray-som-rkc-imx[0-9]*//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx\|ov\)[0-9]*//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
 			"${SDCARD}/boot/armbianEnv.txt"
 	else
 		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"
