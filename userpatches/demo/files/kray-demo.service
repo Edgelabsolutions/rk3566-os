@@ -1,0 +1,13 @@
+[Unit]
+Description=Kray-SoM-RKC exhibition demo (camera, people detection on the NPU, HDMI)
+After=systemd-modules-load.service local-fs.target
+ConditionPathExists=/usr/bin/kray-demo
+
+[Service]
+ExecStart=/usr/lib/kray-demo/kray-demo-start
+Restart=always
+RestartSec=3
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

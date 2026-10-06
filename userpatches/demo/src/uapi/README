@@ -1,0 +1,4 @@
+Rockchip ISP uapi headers from the vendor kernel (armbian/linux-rockchip,
+rk-6.1-rkr7.2, include/uapi/linux/), licensed
+(GPL-2.0+ WITH Linux-syscall-note) OR MIT. Used by kray-demo to set the ISP
+white balance gains through the rkisp-input-params video node.

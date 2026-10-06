@@ -1,0 +1,24 @@
+#!/bin/sh
+# Start the exhibition demo: put the camera sensor into its 1920x1080 mode
+# (30 fps; the default full-resolution mode runs at about 21 fps), then run
+# kray-demo. Started by kray-demo.service.
+CONF=/etc/kray-demo.conf
+SENSOR=$(sed -n 's/^sensor *= *"\{0,1\}\([^"]*\)"\{0,1\}/\1/p' "$CONF" 2>/dev/null)
+SENSOR=${SENSOR:-imx219}
+
+for i in $(seq 1 30); do
+	for m in /dev/media*; do
+		[ -e "$m" ] || continue
+		media-ctl -d "$m" -p 2>/dev/null | grep -q rkisp || continue
+		ENT=$(media-ctl -d "$m" -p 2>/dev/null | sed -n "s/^- entity [0-9]*: \(.*${SENSOR}[^(]*\) (.*/\1/p" | head -1)
+		if [ -n "$ENT" ]; then
+			media-ctl -d "$m" --set-v4l2 "\"$ENT\":0[fmt:SRGGB10_1X10/1920x1080]" &&
+				echo "kray-demo-start: $ENT set to 1920x1080"
+			break 2
+		fi
+	done
+	sleep 1
+done
+[ -n "$ENT" ] || echo "kray-demo-start: no ${SENSOR} camera found, starting without it"
+
+exec /usr/bin/kray-demo "$CONF"

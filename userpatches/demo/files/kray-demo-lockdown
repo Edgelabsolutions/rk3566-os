@@ -1,0 +1,20 @@
+#!/bin/sh
+# Demo image: make the root file system read-only (overlayroot, changes kept
+# in RAM until the next reboot) once the first boot has finished resizing it.
+# Runs at every boot until it has done its job once.
+CONF=/etc/overlayroot.conf
+MARK=/etc/kray-demo/locked
+
+[ -e "$MARK" ] && exit 0
+if systemctl -q is-enabled armbian-resize-filesystem.service 2>/dev/null; then
+	echo "kray-demo-lockdown: file system resize not finished yet, trying at the next boot"
+	exit 0
+fi
+[ -f "$CONF" ] || { echo "kray-demo-lockdown: overlayroot is not installed" >&2; exit 1; }
+
+sed -i 's/^overlayroot=.*/overlayroot="tmpfs:recurse=0"/' "$CONF"
+grep -q '^overlayroot="tmpfs' "$CONF" || echo 'overlayroot="tmpfs:recurse=0"' >> "$CONF"
+mkdir -p "$(dirname "$MARK")"
+date > "$MARK"
+sync
+echo "kray-demo-lockdown: root file system is read-only from the next boot"

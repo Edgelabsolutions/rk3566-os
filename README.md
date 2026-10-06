@@ -69,6 +69,8 @@ The script:
 
 The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through; for the mainline kernel run `./build.sh BRANCH=current`.
 
+`./build.sh KRAY_DEMO=yes` builds the **exhibition demo image** (vendor): it boots straight into a full-screen demo with the IMX219 camera on HDMI, people detection on the NPU and live CPU/NPU load, with a read-only root file system. See [docs/demo.md](docs/demo.md).
+
 The RKNN SDK files are distributed under the Rockchip license, so they are not stored in this repository and are downloaded at build time.
 
 ## Flashing and first boot
@@ -130,8 +132,9 @@ scripts/fetch-npu.sh                       RKNN SDK + NPU test
 scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
 scripts/fetch-hailo.sh                     Hailo-8 driver sources + firmware (4.24.0)
 scripts/build-hailort.sh                   HailoRT .deb (libhailort, hailortcli)
+scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
-docs/                                      vendor image guides (NPU, codecs, crypto)
+docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, testing)
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
@@ -143,6 +146,7 @@ userpatches/
   overlay/rk35xx-vendor-6.1/               vendor device tree overlays (IMX219 / IMX477 cameras)
   camera/imx477/                           IMX477 driver (Raspberry Pi's, adapted for Rockchip)
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
+  demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
 ```
 
 ## Technical notes
