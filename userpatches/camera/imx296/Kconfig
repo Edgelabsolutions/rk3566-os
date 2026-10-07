@@ -1,0 +1,15 @@
+config VIDEO_IMX296
+	tristate "Sony IMX296 sensor support (Raspberry Pi Global Shutter Camera)"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select REGMAP_I2C
+	help
+	  The Sony IMX296 driver from Raspberry Pi's kernel (1 MIPI CSI-2
+	  lane, global shutter), with the bus configuration, frame interval
+	  and link frequency the Rockchip CSI-2 D-PHY and ISP drivers need.
+
+	  The module is called imx296.
+

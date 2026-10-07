@@ -8,10 +8,13 @@ Kray-SoM-RKC has a MIPI CSI-2 connector (four lanes routed) for Raspberry Pi sty
 | Raspberry Pi HQ Camera | Sony IMX477, 12.3 MP | `kray-som-rkc-imx477` | `0x1a` | 2 (the module's 15-pin cable carries two) |
 | Raspberry Pi Camera Module 3 (also Wide, NoIR) | Sony IMX708, 12 MP | `kray-som-rkc-imx708` | `0x1a` | 2 |
 | Raspberry Pi Camera Module 1 | OmniVision OV5647, 5 MP | `kray-som-rkc-ov5647` | `0x36` | 2 |
+| Raspberry Pi Global Shutter Camera | Sony IMX296, 1.6 MP, global shutter | `kray-som-rkc-imx296` | `0x1a` | 1 |
 
-These are the Raspberry Pi camera modules whose sensors have a driver in the Rockchip vendor kernel. The Global Shutter Camera (IMX296) and the AI Camera (IMX500) are not supported: the vendor kernel has no driver for them.
+These are the Raspberry Pi camera modules whose sensors have a driver in the Rockchip vendor kernel. The AI Camera (IMX500) is not supported: it needs Raspberry Pi's firmware loading for its on-sensor network.
 
 The IMX477 driver is Raspberry Pi's (`raspberrypi/linux` rpi-6.1.y), carried in `userpatches/camera/imx477` with the bus-configuration and frame-interval calls the Rockchip CSI-2 D-PHY and ISP drivers need, and built into the vendor kernel (as a module it would probe after the ISP has stopped waiting for its sensor). Its modes: 4056x3040, 2028x1520, 2028x1080, 1332x990 (12/10-bit Bayer).
+
+The IMX296 driver is Raspberry Pi's too (same commit), in `userpatches/camera/imx296`. Besides the bus configuration, frame interval and module information it has a link frequency control (594 MHz, 1188 Mbit/s on its single lane) for the D-PHY, and it uses its own active state when the Rockchip drivers call its pad operations without one. It runs the full 1456x1088 array at 60 fps (10-bit Bayer); smaller sizes are crops.
 
 The IMX219, IMX708 and OV5647 drivers are the vendor kernel's own (Rockchip versions); the IMX708 driver is switched on in the kernel config for this image. Their sensor modes:
 
@@ -20,6 +23,7 @@ The IMX219, IMX708 and OV5647 drivers are the vendor kernel's own (Rockchip vers
 | IMX219 | 3280x2464 (21 fps, default), 1920x1080 (30 fps) |
 | IMX708 | 4608x2592 (14 fps), 1920x1080 (31 and 66 fps), 1536x864 (120 fps) |
 | OV5647 | 2592x1944 (15 fps), 1920x1080 (30 fps), 1296x972 (45 fps), 640x480 (90 fps) |
+| IMX296 | 1456x1088 (60 fps); crops of it |
 
 Camera Module 3: the lens focus motor has no driver in the vendor kernel, so the lens stays at its rest position (focused far, roughly beyond 1 m); there is no autofocus.
 
@@ -27,10 +31,10 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 
 | Part | Where |
 |---|---|
-| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
-| Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` |
+| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647,imx296}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
+| Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` (1 for the IMX296) |
 | Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
-| Kernel | `imx219`, `imx477`, `imx708`, `ov5647` drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
+| Kernel | `imx219`, `imx477`, `imx708`, `ov5647`, `imx296` drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 
 ## Enable
@@ -77,6 +81,14 @@ grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-
 sudo reboot
 ```
 
+### Raspberry Pi Global Shutter Camera (IMX296)
+
+```bash
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx\|ov\)[0-9]*//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx296/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx296' | sudo tee -a /boot/armbianEnv.txt
+sudo reboot
+```
+
 ### Switch cameras
 
 Power off, swap the module, boot, run the commands for the new camera and reboot once more. Booting with the wrong overlay does no harm: the sensor driver does not find its sensor on I2C and no camera appears.
@@ -97,8 +109,8 @@ sudo reboot
 ## Check
 
 ```bash
-dmesg | grep -iE 'imx219|imx477|imx708|ov5647|rkisp|csi2'
-i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708) or 36 (OV5647); "UU" once the driver has it
+dmesg | grep -iE 'imx219|imx477|imx708|ov5647|imx296|rkisp|csi2'
+i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708, IMX296) or 36 (OV5647); "UU" once the driver has it
 v4l2-ctl --list-devices          # rkisp_mainpath, rkisp_selfpath, ...
 media-ctl -d /dev/media0 -p      # sensor -> csi2-dphy0 -> rkisp-isp-subdev -> rkisp_mainpath
 ```
@@ -180,6 +192,7 @@ White balance and colour correction stay at the ISP defaults. For machine vision
 
 - **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above (manual exposure).
 - **IMX708 (Camera Module 3) and OV5647 (Camera Module 1)**: overlays and drivers build; not yet tested with a module.
+- **IMX296 (Global Shutter Camera)**: ported driver and overlay build; not yet tested with a module.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above (manual exposure).
 
 There is no auto exposure or white balance in either case, see above.
