@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kray-SoM-RKC live stream</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --people: #3ddc97; --cpu: #38bdf8; --npu: #a78bfa; --enc: #f59e0b; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 20px; }
+  header h1 { margin: 0; font-size: 26px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+  .video { background: #000; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+           aspect-ratio: 16 / 9; position: relative; }
+  video { width: 100%; height: 100%; display: block; }
+  .msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+         padding: 24px; text-align: center; color: var(--muted); }
+  .msg.bad { color: var(--bad); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px;
+           display: grid; gap: 14px; }
+  .label { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .big { font-size: 44px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+  .row span:first-child { color: var(--muted); }
+  .row span:last-child { font-weight: 600; }
+  .bars { display: flex; gap: 6px; height: 40px; align-items: flex-end; }
+  .bar { flex: 1; background: var(--line); border-radius: 3px; position: relative; height: 100%; }
+  .bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--cpu); border-radius: 3px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+  .about { color: var(--muted); max-width: 75ch; }
+  .about b { color: var(--text); font-weight: 600; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Kray-SoM-RKC · live stream</h1>
+    <p>The board's HDMI picture, encoded to H.265 by the RK3566 hardware video encoder</p>
+  </header>
+
+  <div class="main">
+    <div class="video">
+      <video id="v" muted autoplay playsinline></video>
+      <div class="msg" id="msg">Connecting…</div>
+    </div>
+
+    <div class="panel">
+      <div>
+        <div class="label">CPU load while encoding</div>
+        <div class="big" id="cpu" style="color: var(--cpu)">–</div>
+      </div>
+      <div class="bars" id="cores"></div>
+      <hr>
+      <div class="row"><span>H.265 encoder</span><span id="enc" style="color: var(--enc)">–</span></div>
+      <div class="row"><span>Bitrate</span><span id="kbps">–</span></div>
+      <div class="row"><span>NPU load</span><span id="npu" style="color: var(--npu)">–</span></div>
+      <div class="row"><span>NPU inference</span><span id="infer">–</span></div>
+      <div class="row"><span>People in view</span><span id="people" style="color: var(--people)">–</span></div>
+      <div class="row"><span>Camera</span><span id="cam">–</span></div>
+      <div class="row"><span>SoC temperature</span><span id="temp">–</span></div>
+      <div class="row"><span>Memory</span><span id="ram">–</span></div>
+      <hr>
+      <div class="row"><span>Codec</span><span id="codec">–</span></div>
+    </div>
+  </div>
+
+  <div class="about">
+    <p><b>How it works.</b> The camera picture goes from the ISP to the RGA 2D engine, which scales it for HDMI
+    and for the NPU. The NPU detects people with YOLOv8n. The finished screen is converted to NV12 by the RGA
+    again and encoded to H.265 (1920x1080) by the <b>hardware video encoder</b>, then packed into fragmented MP4
+    without re-encoding. The CPU only draws the boxes and the statistics, which is why its load stays low.</p>
+    <p>Playback needs a browser that decodes H.265 in Media Source Extensions: current Chrome and Edge
+    (with hardware HEVC decoding), Safari. Firefox does not play it.</p>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('v');
+const msg = document.getElementById('msg');
+const $ = id => document.getElementById(id);
+
+function show(text, bad) {
+  msg.textContent = text;
+  msg.className = 'msg' + (bad ? ' bad' : '');
+  msg.hidden = !text;
+}
+
+// RFC 6381 codec string from the hvcC box (ISO/IEC 14496-15) in the MP4 header.
+function hevcCodec(init) {
+  for (let i = 4; i + 17 < init.length; i++) {
+    if (init[i] !== 0x68 || init[i + 1] !== 0x76 || init[i + 2] !== 0x63 || init[i + 3] !== 0x43) continue;
+    const c = init.subarray(i + 4);
+    const space = c[1] >> 6, tier = (c[1] >> 5) & 1, profile = c[1] & 0x1f;
+    let compat = ((c[2] << 24) | (c[3] << 16) | (c[4] << 8) | c[5]) >>> 0, rev = 0;
+    for (let b = 0; b < 32; b++) { rev = (rev << 1) | (compat & 1); compat >>>= 1; }
+    let s = 'hvc1.' + ['', 'A', 'B', 'C'][space] + profile + '.' + (rev >>> 0).toString(16) +
+            '.' + (tier ? 'H' : 'L') + c[12];
+    const cons = Array.from(c.subarray(6, 12));
+    while (cons.length && cons[cons.length - 1] === 0) cons.pop();
+    for (const x of cons) s += '.' + x.toString(16).toUpperCase();
+    return s;
+  }
+  return 'hvc1.1.6.L120.90';
+}
+
+// Length of the ftyp + moov header, once both boxes are complete.
+function headerLength(buf) {
+  let off = 0;
+  while (off + 8 <= buf.length) {
+    const size = ((buf[off] << 24) | (buf[off + 1] << 16) | (buf[off + 2] << 8) | buf[off + 3]) >>> 0;
+    const type = String.fromCharCode(buf[off + 4], buf[off + 5], buf[off + 6], buf[off + 7]);
+    if (size < 8 || off + size > buf.length) return 0;
+    off += size;
+    if (type === 'moov') return off;
+  }
+  return 0;
+}
+
+async function play() {
+  if (!window.MediaSource && !window.ManagedMediaSource) {
+    show('This browser has no Media Source Extensions.', true);
+    return;
+  }
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  let resp;
+  try {
+    resp = await fetch('stream.mp4', { cache: 'no-store' });
+    if (!resp.ok) throw new Error(resp.status);
+  } catch (e) {
+    show('Stream not available yet, retrying…');
+    return setTimeout(play, 2000);
+  }
+  const reader = resp.body.getReader();
+  let pending = new Uint8Array(0), hdr = 0;
+  while (!hdr) {
+    const { value, done } = await reader.read();
+    if (done) return setTimeout(play, 2000);
+    const n = new Uint8Array(pending.length + value.length);
+    n.set(pending); n.set(value, pending.length); pending = n;
+    hdr = headerLength(pending);
+  }
+  const codec = hevcCodec(pending.subarray(0, hdr));
+  $('codec').textContent = codec;
+  const type = 'video/mp4; codecs="' + codec + '"';
+  if (!MS.isTypeSupported(type)) {
+    show('This browser cannot play H.265 (' + codec + '). Try current Chrome, Edge or Safari.', true);
+    reader.cancel();
+    return;
+  }
+  const ms = new MS();
+  video.disableRemotePlayback = true;
+  video.src = URL.createObjectURL(ms);
+  await new Promise(r => ms.addEventListener('sourceopen', r, { once: true }));
+  const sb = ms.addSourceBuffer(type);
+  const queue = [pending];
+  const pump = () => {
+    if (sb.updating || !queue.length) return;
+    try { sb.appendBuffer(queue.shift()); } catch (e) { /* buffer full: dropped below */ }
+  };
+  sb.addEventListener('updateend', () => {
+    const b = sb.buffered;
+    if (b.length) {
+      const end = b.end(b.length - 1);
+      if (end - video.currentTime > 1.5) video.currentTime = end - 0.3;   // stay near live
+      if (video.currentTime - b.start(0) > 20 && !sb.updating) {
+        sb.remove(b.start(0), video.currentTime - 10);
+        return;
+      }
+    }
+    pump();
+  });
+  pump();
+  show('');
+  video.play().catch(() => {});
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    queue.push(value);
+    if (queue.length > 200) queue.splice(0, queue.length - 50);
+    pump();
+  }
+  show('Stream ended, reconnecting…');
+  setTimeout(() => location.reload(), 2000);
+}
+
+async function stats() {
+  try {
+    const s = await (await fetch('stats', { cache: 'no-store' })).json();
+    const pct = x => Math.round(x * 100) + ' %';
+    $('cpu').textContent = pct(s.cpu);
+    const cores = $('cores');
+    if (cores.children.length !== s.cpu_cores.length)
+      cores.innerHTML = s.cpu_cores.map(() => '<div class="bar"><i></i></div>').join('');
+    s.cpu_cores.forEach((c, i) => cores.children[i].firstChild.style.height = Math.round(c * 100) + '%');
+    $('enc').textContent = s.encoder_fps.toFixed(0) + ' fps · 1920x1080';
+    $('kbps').textContent = (s.encoder_kbps / 1000).toFixed(1) + ' Mbit/s';
+    $('npu').textContent = pct(s.npu);
+    $('infer').textContent = s.npu_fps.toFixed(1) + ' fps · ' + s.inference_ms.toFixed(0) + ' ms';
+    $('people').textContent = s.people + ' (max today ' + s.max_today + ')';
+    $('cam').textContent = s.camera_fps.toFixed(1) + ' fps';
+    $('temp').textContent = s.temp_c.toFixed(1) + ' °C';
+    $('ram').textContent = s.ram_used_mb + ' / ' + s.ram_total_mb + ' MB';
+  } catch (e) { /* board busy or restarting */ }
+}
+
+play();
+stats();
+setInterval(stats, 1000);
+</script>
+</body>
+</html>

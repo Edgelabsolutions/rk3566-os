@@ -22,3 +22,4 @@
 # Exhibition demo: program and converted NPU model (scripts/build-demo.sh)
 /userpatches/demo/kray-demo
 /userpatches/demo/*.rknn
+__pycache__/

@@ -7,7 +7,7 @@
 #   yolov8n-rk3566.rknn       the model, int8
 #
 # Needs: aarch64-linux-gnu-g++, curl, git, and the multimedia packages from
-# scripts/build-multimedia.sh (for librga). The RKNN runtime headers come from
+# scripts/build-multimedia.sh (librga, Rockchip MPP). The RKNN runtime headers come from
 # scripts/fetch-npu.sh, which is run if needed.
 set -euo pipefail
 
@@ -32,8 +32,11 @@ API="${ROOT}/.cache/rknn-toolkit2-${RKNN_TAG}/rknpu2/runtime/Linux/librknn_api"
 # --- arm64 sysroot: libdrm from Debian, librga from our multimedia packages
 SYSROOT="${WORK}/sysroot"
 RGA_DEB="$(ls "${ROOT}"/userpatches/multimedia/librga-rockchip_*_arm64.deb 2>/dev/null | head -1 || true)"
-[[ -n "${RGA_DEB}" ]] || { echo "librga package missing: run scripts/build-multimedia.sh first" >&2; exit 1; }
-if [[ ! -f "${SYSROOT}/usr/include/xf86drm.h" || ! -f "${SYSROOT}/usr/include/rga/im2d.hpp" ]]; then
+MPP_DEB="$(ls "${ROOT}"/userpatches/multimedia/rockchip-mpp_*_arm64.deb 2>/dev/null | head -1 || true)"
+[[ -n "${RGA_DEB}" && -n "${MPP_DEB}" ]] ||
+	{ echo "librga/MPP packages missing: run scripts/build-multimedia.sh first" >&2; exit 1; }
+if [[ ! -f "${SYSROOT}/usr/include/xf86drm.h" || ! -f "${SYSROOT}/usr/include/rga/im2d.hpp" ||
+      ! -f "${SYSROOT}/usr/include/rockchip/rk_mpi.h" ]]; then
 	echo "==> Preparing arm64 sysroot"
 	rm -rf "${SYSROOT}" "${WORK}/debs"
 	mkdir -p "${SYSROOT}" "${WORK}/debs"
@@ -43,6 +46,7 @@ if [[ ! -f "${SYSROOT}/usr/include/xf86drm.h" || ! -f "${SYSROOT}/usr/include/rg
 		dpkg-deb -x "${WORK}/debs/${p}.deb" "${SYSROOT}"
 	done
 	dpkg-deb -x "${RGA_DEB}" "${SYSROOT}"
+	dpkg-deb -x "${MPP_DEB}" "${SYSROOT}"
 fi
 
 # --- stb_truetype (public domain / MIT)
@@ -57,7 +61,7 @@ echo "==> Cross-compiling kray-demo with ${CXX}"
 	-I"${DEMO}/src" -I"${DEMO}/src/uapi" -I"${STB}" -I"${API}/include" \
 	-I"${SYSROOT}/usr/include" -I"${SYSROOT}/usr/include/libdrm" \
 	-L"${API}/aarch64" -L"${SYSROOT}/usr/lib/aarch64-linux-gnu" \
-	-lrknnrt -lrga -ldrm -lpthread -lm
+	-lrknnrt -lrga -ldrm -lrockchip_mpp -lpthread -lm
 aarch64-linux-gnu-strip "${DEMO}/kray-demo"
 
 # --- Model: YOLOv8n (rknn_model_zoo export) converted to int8 for the RK3566

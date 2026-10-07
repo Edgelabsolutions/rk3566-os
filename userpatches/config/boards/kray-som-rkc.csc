@@ -300,7 +300,7 @@ function post_family_config__kray_som_rkc_demo_packages() {
 	[[ "${KRAY_DEMO:-no}" == "yes" ]] || return 0
 	# overlayroot's initramfs script needs grep, which the initramfs only has
 	# with busybox.
-	add_packages_to_image fonts-dejavu-core overlayroot busybox
+	add_packages_to_image fonts-dejavu-core overlayroot busybox python3
 }
 
 function post_customize_image__kray_som_rkc_demo() {
@@ -317,7 +317,12 @@ function post_customize_image__kray_som_rkc_demo() {
 	install -D -m 0644 "${src}/files/kray-demo-lockdown.service" \
 		"${SDCARD}/usr/lib/systemd/system/kray-demo-lockdown.service"
 	install -D -m 0644 "${src}/files/kray-demo.conf" "${SDCARD}/etc/kray-demo.conf"
-	chroot_sdcard systemctl enable kray-demo.service kray-demo-lockdown.service
+	# H.265 live stream of the screen and its web page (port 8080)
+	install -D -m 0755 "${src}/files/kray-demo-stream" "${SDCARD}/usr/lib/kray-demo/kray-demo-stream"
+	install -D -m 0644 "${src}/files/kray-demo-stream.service" \
+		"${SDCARD}/usr/lib/systemd/system/kray-demo-stream.service"
+	install -D -m 0644 "${src}/files/www/index.html" "${SDCARD}/usr/share/kray-demo/www/index.html"
+	chroot_sdcard systemctl enable kray-demo.service kray-demo-lockdown.service kray-demo-stream.service
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
