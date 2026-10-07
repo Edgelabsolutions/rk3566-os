@@ -20,13 +20,17 @@
 #include <thread>
 #include <vector>
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <linux/videodev2.h>
+#include <net/if.h>
 #include <rga/im2d.hpp>
 #include <rga/RgaUtils.h>
 
 #include "camera.h"
 #include "canvas.h"
 #include "detector.h"
+#include "encoder.h"
 #include "display.h"
 #include "stats.h"
 
@@ -56,6 +60,10 @@ struct Config {
 	bool awb = true;         // automatic white balance (grey world on near-neutral pixels)
 	int wb_red = 400;        // ISP white balance gains, 256 = 1.0: start values,
 	int wb_blue = 400;       // or fixed values with awb = 0
+	bool stream = true;      // H.265 live stream of the screen (kray-demo-stream serves it)
+	int stream_kbps = 4000;
+	int stream_fps = 30;
+	int stream_port = 8080;  // shown on screen; the port kray-demo-stream listens on
 };
 
 static void load_config(const char *path, Config &c)
@@ -94,6 +102,10 @@ static void load_config(const char *path, Config &c)
 		else if (k == "awb") c.awb = v == "1" || v == "yes" || v == "true";
 		else if (k == "wb_red") c.wb_red = atoi(v.c_str());
 		else if (k == "wb_blue") c.wb_blue = atoi(v.c_str());
+		else if (k == "stream") c.stream = v == "1" || v == "yes" || v == "true";
+		else if (k == "stream_kbps") c.stream_kbps = atoi(v.c_str());
+		else if (k == "stream_fps") c.stream_fps = atoi(v.c_str());
+		else if (k == "stream_port") c.stream_port = atoi(v.c_str());
 	}
 }
 
@@ -283,6 +295,9 @@ struct UiState {
 	float npu_share = 0; // fallback when the driver does not report NPU load
 	float cam_fps = 0, npu_fps = 0, infer_ms = 0;
 	int people = 0, max_today = 0;
+	float enc_fps = 0, enc_kbps = 0;
+	bool enc_ok = false;
+	std::string url;
 	bool camera_ok = false, model_ok = false;
 	std::deque<float> cpu_hist, npu_hist;
 	float npu() const { return sys.npu >= 0 ? sys.npu : npu_share; }
@@ -392,6 +407,17 @@ static void draw_chrome(Canvas &c, Font &reg, Font &bold, const Layout &L, const
 	char mem[64];
 	snprintf(mem, sizeof(mem), "%d / %d MB", u.sys.ram_used_mb, u.sys.ram_total_mb);
 	draw_row(c, reg, bold, s, x, w, y, "Memory", mem, col::text);
+	if (u.enc_ok) {
+		y += int(48 * s);
+		draw_row(c, reg, bold, s, x, w, y, "H.265 encoder",
+			 fmt("%.0f fps \u00b7 ", u.enc_fps) + fmt("%.1f Mbit/s", u.enc_kbps / 1000), col::text);
+		if (!u.url.empty()) {
+			y += int(64 * s);
+			reg.draw(c, x, y, int(22 * s), col::muted, col::panel, "LIVE STREAM IN A BROWSER");
+			y += int(38 * s);
+			bold.draw(c, x, y, int(28 * s), col::cpu, col::panel, u.url);
+		}
+	}
 
 	int fy = p.y + p.h - pad;
 	reg.draw(c, x, fy, int(18 * s), col::muted, col::panel, cfg.footer2);
@@ -410,6 +436,47 @@ static void draw_chrome(Canvas &c, Font &reg, Font &bold, const Layout &L, const
 		int tw = reg.width(int(36 * s), msg);
 		reg.draw(c, v.x + (v.w - tw) / 2, v.y + v.h / 2, int(36 * s), col::muted, col::bg, msg);
 	}
+}
+
+// First IPv4 address that is not loopback (wired first), for the stream URL.
+static std::string local_ip()
+{
+	ifaddrs *list = nullptr;
+	if (getifaddrs(&list) != 0)
+		return {};
+	std::string best;
+	for (ifaddrs *a = list; a; a = a->ifa_next) {
+		if (!a->ifa_addr || a->ifa_addr->sa_family != AF_INET || (a->ifa_flags & IFF_LOOPBACK) ||
+		    !(a->ifa_flags & IFF_UP))
+			continue;
+		char buf[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &reinterpret_cast<sockaddr_in *>(a->ifa_addr)->sin_addr, buf, sizeof(buf));
+		if (best.empty() || strncmp(a->ifa_name, "end", 3) == 0 || strncmp(a->ifa_name, "eth", 3) == 0)
+			best = buf;
+	}
+	freeifaddrs(list);
+	return best;
+}
+
+// Live figures for the stream web page (served by kray-demo-stream).
+static void write_stats_json(const UiState &u)
+{
+	std::string cores;
+	for (size_t i = 0; i < u.sys.cpu_core.size(); i++)
+		cores += (i ? "," : "") + fmt("%.3f", u.sys.cpu_core[i]);
+	char buf[1024];
+	snprintf(buf, sizeof(buf),
+		 "{\"cpu\":%.3f,\"cpu_cores\":[%s],\"npu\":%.3f,\"temp_c\":%.1f,\"ram_used_mb\":%d,"
+		 "\"ram_total_mb\":%d,\"camera_fps\":%.1f,\"npu_fps\":%.1f,\"inference_ms\":%.1f,"
+		 "\"people\":%d,\"max_today\":%d,\"encoder_fps\":%.1f,\"encoder_kbps\":%.0f}\n",
+		 u.sys.cpu_total, cores.c_str(), u.npu(), u.sys.temp_c, u.sys.ram_used_mb, u.sys.ram_total_mb,
+		 u.cam_fps, u.npu_fps, u.infer_ms, u.people, u.max_today, u.enc_fps, u.enc_kbps);
+	FILE *f = fopen("/run/kray-demo/stats.json.tmp", "w");
+	if (!f)
+		return;
+	fputs(buf, f);
+	fclose(f);
+	rename("/run/kray-demo/stats.json.tmp", "/run/kray-demo/stats.json");
 }
 
 static void draw_boxes(Canvas &c, Font &bold, const Layout &L, const Config &cfg, int cw, int ch,
@@ -462,6 +529,7 @@ int main(int argc, char **argv)
 	Display disp;
 	Camera cam;
 	Detector det;
+	Encoder enc;
 	StatsReader stats;
 	AutoExposure ae;
 	WhiteBalance wb;
@@ -494,6 +562,11 @@ int main(int argc, char **argv)
 			if (!disp.open())
 				continue;
 			L.compute(disp.width(), disp.height());
+			if (cfg.stream && !enc.ready()) {
+				ui.enc_ok = enc.init(disp.width(), disp.height(), cfg.stream_fps, cfg.stream_kbps,
+						     "/run/kray-demo/h265.fifo");
+				chrome_version++;
+			}
 			bool ok = true;
 			for (int i = 0; i < 2; i++) {
 				Display::Buffer &b = disp.back();
@@ -616,6 +689,13 @@ int main(int argc, char **argv)
 			}
 			stats.sample(ui.sys);
 			ui.npu_share = det.busy_share();
+			if (ui.enc_ok) {
+				ui.enc_fps = enc.fps();
+				ui.enc_kbps = enc.kbps();
+				std::string ip = local_ip();
+				ui.url = ip.empty() ? std::string() : "http://" + ip + ":" + std::to_string(cfg.stream_port);
+			}
+			write_stats_json(ui);
 			ui.cpu_hist.push_back(ui.sys.cpu_total);
 			ui.npu_hist.push_back(ui.npu());
 			while (ui.cpu_hist.size() > kHist)
@@ -631,14 +711,19 @@ int main(int argc, char **argv)
 		}
 		if (ui.camera_ok)
 			draw_boxes(canvas, bold, L, cfg, cam.width(), cam.height(), dets);
+		// Encode what is on screen (at most stream_fps; skipped while the
+		// encoder is still busy with the previous frame).
+		if (ui.enc_ok)
+			enc.submit(b.dmafd, disp.width(), disp.height(), int(b.pitch / 4));
 
 		if (now - t_log >= std::chrono::seconds(10)) {
 			t_log = now;
 			fprintf(stderr,
 				"kray-demo: camera %.1f fps, npu %.1f fps (%.0f ms), people %d, cpu %.0f%%, npu %.0f%%, "
-				"%.1f C, ram %d/%d MB, wb R %.2f B %.2f\n",
+				"%.1f C, ram %d/%d MB, wb R %.2f B %.2f, h265 %.0f fps %.0f kbit/s\n",
 				ui.cam_fps, ui.npu_fps, ui.infer_ms, ui.people, ui.sys.cpu_total * 100, ui.npu() * 100,
-				ui.sys.temp_c, ui.sys.ram_used_mb, ui.sys.ram_total_mb, wb.red() / 256.0, wb.blue() / 256.0);
+				ui.sys.temp_c, ui.sys.ram_used_mb, ui.sys.ram_total_mb, wb.red() / 256.0, wb.blue() / 256.0,
+				ui.enc_fps, ui.enc_kbps);
 		}
 
 		if (!disp.flip() || (idx < 0 && !disp.connected())) {

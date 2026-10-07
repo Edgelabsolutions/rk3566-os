@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+# Kray-SoM-RKC demo: serves the H.265 live stream of the screen and the web
+# page that plays it.
+#
+# kray-demo writes the stream (H.265 Annex-B from the hardware encoder) into
+# /run/kray-demo/h265.fifo. ffmpeg repackages it without re-encoding into
+# fragmented MP4 (one fragment per keyframe interval). This server keeps the
+# MP4 header (ftyp + moov) and sends it, then the live fragments, to every
+# viewer of /stream.mp4. The page (index.html) plays it with Media Source
+# Extensions and polls /stats for the live figures.
+import asyncio
+import os
+import shutil
+import sys
+
+FIFO = "/run/kray-demo/h265.fifo"
+STATS = "/run/kray-demo/stats.json"
+WWW = "/usr/share/kray-demo/www"
+CONF = "/etc/kray-demo.conf"
+
+
+def config():
+    cfg = {"stream_port": "8080", "stream_fps": "30"}
+    try:
+        with open(CONF) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    cfg[k.strip()] = v.strip().strip('"')
+    except OSError:
+        pass
+    return cfg
+
+
+class Stream:
+    def __init__(self, fps):
+        self.fps = fps
+        self.init = None          # ftyp + moov
+        self.viewers = set()      # asyncio.Queue per viewer
+
+    async def run(self):
+        ffmpeg = shutil.which("ffmpeg") or "/usr/local/bin/ffmpeg"
+        while True:
+            while not os.path.exists(FIFO):
+                await asyncio.sleep(1)
+            proc = await asyncio.create_subprocess_exec(
+                ffmpeg, "-hide_banner", "-loglevel", "error",
+                "-fflags", "+genpts+nobuffer", "-probesize", "1M",
+                "-f", "hevc", "-framerate", str(self.fps), "-i", FIFO,
+                "-c:v", "copy", "-tag:v", "hvc1", "-f", "mp4",
+                "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-",
+                stdout=asyncio.subprocess.PIPE)
+            print("kray-demo-stream: ffmpeg started", flush=True)
+            try:
+                await self.read_boxes(proc.stdout)
+            finally:
+                if proc.returncode is None:
+                    proc.kill()
+                await proc.wait()
+            print("kray-demo-stream: ffmpeg stopped, restarting", flush=True)
+            self.init = None
+            await asyncio.sleep(1)
+
+    async def read_boxes(self, out):
+        head = b""
+        fragment = b""
+        while True:
+            hdr = await out.readexactly(8)
+            size = int.from_bytes(hdr[:4], "big")
+            kind = hdr[4:8]
+            if size == 1:
+                ext = await out.readexactly(8)
+                hdr += ext
+                size = int.from_bytes(ext, "big")
+            body = await out.readexactly(size - len(hdr))
+            box = hdr + body
+            if kind in (b"ftyp", b"moov"):
+                head += box
+                if kind == b"moov":
+                    self.init = head
+                    head = b""
+            elif kind == b"moof":
+                fragment = box
+            elif kind == b"mdat" and fragment:
+                self.publish(fragment + box)
+                fragment = b""
+
+    def publish(self, data):
+        for q in list(self.viewers):
+            if q.qsize() > 20:      # viewer too slow: drop it
+                q.put_nowait(None)
+                self.viewers.discard(q)
+            else:
+                q.put_nowait(data)
+
+
+async def send_file(writer, path, ctype):
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        return
+    writer.write(("HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\n"
+                  "Cache-Control: no-store\r\nConnection: close\r\n\r\n" % (ctype, len(data))).encode())
+    writer.write(data)
+
+
+async def handle(stream, reader, writer):
+    try:
+        request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
+        path = request.split(b" ", 2)[1].decode(errors="replace").split("?")[0]
+        if path in ("/", "/index.html"):
+            await send_file(writer, os.path.join(WWW, "index.html"), "text/html; charset=utf-8")
+        elif path == "/stats":
+            await send_file(writer, STATS, "application/json")
+        elif path == "/stream.mp4":
+            for _ in range(50):
+                if stream.init:
+                    break
+                await asyncio.sleep(0.1)
+            if not stream.init:
+                writer.write(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            else:
+                writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nCache-Control: no-store\r\n"
+                             b"Connection: close\r\n\r\n")
+                writer.write(stream.init)
+                q = asyncio.Queue()
+                stream.viewers.add(q)
+                try:
+                    while True:
+                        data = await q.get()
+                        if data is None:
+                            break
+                        writer.write(data)
+                        await writer.drain()
+                finally:
+                    stream.viewers.discard(q)
+        else:
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        await writer.drain()
+    except (asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError, IndexError):
+        pass
+    finally:
+        writer.close()
+
+
+async def main():
+    cfg = config()
+    stream = Stream(int(cfg.get("stream_fps", "30")))
+    port = int(cfg.get("stream_port", "8080"))
+    server = await asyncio.start_server(lambda r, w: handle(stream, r, w), host="0.0.0.0", port=port)
+    print("kray-demo-stream: http://0.0.0.0:%d/" % port, flush=True)
+    async with server:
+        await asyncio.gather(server.serve_forever(), stream.run())
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)

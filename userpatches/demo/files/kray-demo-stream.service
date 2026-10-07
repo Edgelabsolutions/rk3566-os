@@ -1,0 +1,12 @@
+[Unit]
+Description=Kray-SoM-RKC demo: H.265 live stream web page (port 8080)
+After=network.target kray-demo.service
+ConditionPathExists=/usr/lib/kray-demo/kray-demo-stream
+
+[Service]
+ExecStart=/usr/lib/kray-demo/kray-demo-stream
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

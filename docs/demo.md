@@ -5,7 +5,8 @@ A vendor image that boots straight into a full-screen demo on HDMI:
 - the picture of a Raspberry Pi Camera v2 (IMX219), 1920x1080 at 30 fps;
 - people detected with YOLOv8n on the RK3566 NPU: boxes, the number of people in view and the maximum today;
 - a panel with the camera and NPU frame rates, the inference time, CPU load, SoC temperature and memory use;
-- CPU (total and per core) and NPU load over the last 60 seconds.
+- CPU (total and per core) and NPU load over the last 60 seconds;
+- a live **H.265 stream** of the same screen, encoded by the hardware video encoder, on a web page: `http://<board address>:8080` (the address is shown on screen).
 
 The image has no Rockchip `rkaiq`, so the demo does its own auto exposure (exposure, then gain on the IMX219) and white balance: it compares the mean colour of near-neutral pixels with grey and sets the red and blue gains of the ISP through its parameter node (`rkisp-input-params`). Without it the picture has a green cast.
 
@@ -43,8 +44,9 @@ What the demo image adds to the normal vendor image:
 | `/etc/kray-demo.conf` | settings |
 | `kray-demo.service` | starts the demo at boot, restarts it if it stops |
 | `kray-demo-lockdown.service` | makes the root file system read-only after the first boot |
+| `kray-demo-stream.service` | serves the H.265 stream and its web page on port 8080 |
 | `overlays=kray-som-rkc-imx219` | camera overlay enabled in `/boot/armbianEnv.txt` |
-| packages | `fonts-dejavu-core`, `overlayroot`, `busybox` (overlayroot's initramfs script needs its `grep`) |
+| packages | `fonts-dejavu-core`, `overlayroot`, `busybox` (overlayroot's initramfs script needs its `grep`), `python3` (stream server) |
 
 ## First boot
 
@@ -55,6 +57,20 @@ What the demo image adds to the normal vendor image:
    - Wi-Fi or a static IP address, if the board is to be reachable at the stand;
    - settings in `/etc/kray-demo.conf`.
 4. Reboot. From now on the root file system is read-only.
+
+## Live H.265 stream
+
+Open `http://<board address>:8080` in a browser on the same network; the address is shown in the panel on HDMI. The page plays the HDMI picture (camera, boxes, panel) and shows the board's live figures next to it, so visitors can watch the CPU load stay low while the board encodes video.
+
+How the stream is made, without the CPU touching the picture:
+
+1. After drawing each frame, kray-demo has RGA convert the display buffer (XRGB, 1920x1080) into an NV12 buffer of the encoder.
+2. The hardware video encoder (VEPU540, through Rockchip MPP) encodes it to H.265: constant bitrate (4 Mbit/s by default), 30 fps, a keyframe every 0.5 s with the parameter sets, so a new viewer starts within half a second.
+3. kray-demo writes the stream into `/run/kray-demo/h265.fifo`. When nobody reads it, frames are dropped up to the next keyframe; the demo never waits for the network.
+4. `kray-demo-stream` (Python, no extra modules) runs `ffmpeg -c copy`, which packs the stream into fragmented MP4 without re-encoding, and sends the MP4 header and the live fragments to every viewer of `/stream.mp4`.
+5. The page plays it with Media Source Extensions and keeps playback within about a second of live. `/stats` gives the live figures (written by kray-demo to `/run/kray-demo/stats.json`).
+
+Browsers: playback needs H.265 in Media Source Extensions: current Chrome and Edge on computers and phones with hardware HEVC decoding, and Safari. Firefox does not play H.265; the page says so.
 
 ## Settings
 
@@ -70,8 +86,11 @@ What the demo image adds to the normal vendor image:
 | `max_gain` | `10912` | auto exposure: highest gain (IMX219 driver units: 2728 = 10.66x analogue; above that digital gain is added) |
 | `awb` | `1` | automatic white balance; `0` keeps `wb_red` / `wb_blue` fixed |
 | `wb_red`, `wb_blue` | `400` | ISP white balance gains (256 = 1.0): start values, or the fixed values with `awb = 0` |
+| `stream` | `1` | H.265 live stream; `0` switches the encoder off |
+| `stream_kbps`, `stream_fps` | `4000`, `30` | stream bitrate (kbit/s) and frame rate |
+| `stream_port` | `8080` | port of the stream page (shown on screen; used by `kray-demo-stream`) |
 
-Apply with `sudo systemctl restart kray-demo`.
+Apply with `sudo systemctl restart kray-demo kray-demo-stream`.
 
 ## Read-only root
 
