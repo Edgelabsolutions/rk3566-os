@@ -203,6 +203,26 @@ function custom_kernel_config__kray_som_rkc_imx477() {
 	opts_y+=("VIDEO_IMX477")
 }
 
+# Raspberry Pi Global Shutter Camera (IMX296): Raspberry Pi's imx296 driver
+# with Rockchip glue (userpatches/camera/imx296), built in like imx477.
+function custom_kernel_config__kray_som_rkc_imx296() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/camera/imx296"
+	kernel_config_modifying_hashes+=("imx296=y-$(cat "${src}"/* | sha256sum | cut -c1-16)")
+	[[ -f .config ]] || return 0
+
+	local dir="${kernel_work_dir}/drivers/media/i2c"
+	cp "${src}/imx296.c" "${dir}/"
+	if ! grep -q 'config VIDEO_IMX296' "${dir}/Kconfig"; then
+		sed -i "/^config VIDEO_IMX378$/e cat ${src}/Kconfig" "${dir}/Kconfig"
+		grep -q 'config VIDEO_IMX296' "${dir}/Kconfig" ||
+			exit_with_error "Could not add VIDEO_IMX296 to ${dir}/Kconfig"
+	fi
+	grep -q 'CONFIG_VIDEO_IMX296' "${dir}/Makefile" ||
+		echo 'obj-$(CONFIG_VIDEO_IMX296) += imx296.o' >> "${dir}/Makefile"
+	opts_y+=("VIDEO_IMX296")
+}
+
 # Raspberry Pi Camera Module 3 (IMX708): the vendor tree has a Rockchip-style
 # imx708 driver that is off in the kernel config. Built in, like the other
 # camera drivers, so that it probes before the ISP stops waiting for sensors.

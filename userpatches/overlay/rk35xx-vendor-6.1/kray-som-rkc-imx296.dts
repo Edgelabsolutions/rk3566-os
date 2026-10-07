@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: Raspberry Pi Global Shutter Camera (Sony IMX296, 1.6 MP) on
+ * the CSI connector. Vendor kernel only.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-imx296
+ *
+ * Sensor on I2C1 at 0x1a, one MIPI CSI-2 lane (about 1188 Mbit/s) through
+ * csi2_dphy0 into rkisp (rkisp_vir0). The module has its own 54 MHz
+ * oscillator, one of the rates the imx296 driver accepts. Camera power-down
+ * (GPIO2_C0) and reset (GPIO2_C1) are held high, as for the other camera
+ * overlays.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			kray_cam_clk: kray-camera-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <54000000>;
+				clock-output-names = "kray_cam_clk";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio2>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-pdn", "camera-reset";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx296: imx296@1a {
+				compatible = "sony,imx296";
+				reg = <0x1a>;
+				clocks = <&kray_cam_clk>;
+				clock-names = "inck";
+				rockchip,camera-module-index = <0>;
+				rockchip,camera-module-facing = "back";
+				rockchip,camera-module-name = "rpi-gs-camera";
+				rockchip,camera-module-lens-name = "default";
+
+				port {
+					imx296_out: endpoint {
+						remote-endpoint = <&dphy0_in_imx296>;
+						data-lanes = <1>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_imx296: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&imx296_out>;
+						data-lanes = <1>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};
