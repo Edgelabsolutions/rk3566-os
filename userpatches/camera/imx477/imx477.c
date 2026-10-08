@@ -7,7 +7,8 @@
  *  - for rkaiq: RKMODULE_GET_MODULE_INFO, linear-only RKMODULE_[GS]ET_HDR_CFG
  *    and Rockchip subdev naming;
  *  - 2028x1520 as the default mode;
- *  - the sony,imx378 compatible dropped (left to Rockchip's imx378 driver).
+ *  - sony,imx378 handled here too (2-lane Raspberry Pi style modules; Rockchip's
+ *    own imx378 driver is for 4-lane modules and is switched off).
  */
 /*
  * A V4L2 driver for Sony IMX477 cameras.
@@ -1984,6 +1985,14 @@ static int imx477_identify_module(struct imx477 *imx477, u32 expected_id)
  * RKMODULE_GET_MODULE_INFO to pick its tuning file
  * (<sensor>_<module>_<lens>.json).
  */
+/* Sensor name for Rockchip naming and module information */
+static const char *imx477_chip_name(struct imx477 *imx477)
+{
+	return imx477->compatible_data &&
+	       imx477->compatible_data->chip_id == IMX378_CHIP_ID ?
+	       "imx378" : "imx477";
+}
+
 static long imx477_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	struct imx477 *imx477 = to_imx477(sd);
@@ -2003,7 +2012,7 @@ static long imx477_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 	case RKMODULE_GET_MODULE_INFO:
 		inf = arg;
 		memset(inf, 0, sizeof(*inf));
-		strscpy(inf->base.sensor, "imx477", sizeof(inf->base.sensor));
+		strscpy(inf->base.sensor, imx477_chip_name(imx477), sizeof(inf->base.sensor));
 		strscpy(inf->base.module, imx477->module_name,
 			sizeof(inf->base.module));
 		strscpy(inf->base.lens, imx477->len_name, sizeof(inf->base.lens));
@@ -2258,7 +2267,7 @@ static const struct imx477_reg imx378_regs[] = {
 	{0x3ff9, 0x00},
 };
 
-static const struct imx477_compatible_data imx378_compatible __maybe_unused = {
+static const struct imx477_compatible_data imx378_compatible = {
 	.chip_id = IMX378_CHIP_ID,
 	.extra_regs = {
 		.num_of_regs = ARRAY_SIZE(imx378_regs),
@@ -2268,7 +2277,7 @@ static const struct imx477_compatible_data imx378_compatible __maybe_unused = {
 
 static const struct of_device_id imx477_dt_ids[] = {
 	{ .compatible = "sony,imx477", .data = &imx477_compatible },
-	/* sony,imx378 is left to Rockchip's 4-lane imx378 driver */
+	{ .compatible = "sony,imx378", .data = &imx378_compatible },
 	{ /* sentinel */ }
 };
 
@@ -2380,10 +2389,10 @@ static int imx477_probe(struct i2c_client *client)
 	}
 
 	/* Rockchip naming: m<index>_<b|f>_<sensor> <i2c device> */
-	snprintf(imx477->sd.name, sizeof(imx477->sd.name), "m%02u_%s_imx477 %s",
+	snprintf(imx477->sd.name, sizeof(imx477->sd.name), "m%02u_%s_%s %s",
 		 imx477->module_index,
 		 strcmp(imx477->module_facing, "back") ? "f" : "b",
-		 dev_name(imx477->sd.dev));
+		 imx477_chip_name(imx477), dev_name(imx477->sd.dev));
 
 	ret = v4l2_async_register_subdev_sensor(&imx477->sd);
 	if (ret < 0) {

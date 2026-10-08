@@ -1,0 +1,15 @@
+config VIDEO_IMX283
+	tristate "Sony IMX283 sensor support (1-inch 20 MP)"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select REGMAP_I2C
+	help
+	  Raspberry Pi's driver for the Sony IMX283 (4 MIPI CSI-2 lanes),
+	  backported to Linux 6.1, with the bus configuration and frame
+	  interval calls the Rockchip CSI-2 D-PHY and ISP drivers need.
+
+	  The module is called imx283.
+

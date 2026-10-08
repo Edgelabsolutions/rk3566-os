@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: Sony IMX283 1-inch 20 MP camera module (e.g. OneInchEye) on the CSI connector. Vendor kernel only.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-imx283
+ *
+ * Raspberry Pi's imx283 driver, backported (built in, userpatches/camera/
+ * imx283). Sensor on I2C1 at 0x1a, four MIPI CSI-2 lanes at 720 MHz
+ * (1440 Mbit/s per lane) through csi2_dphy0 into rkisp (rkisp_vir0), 24 MHz
+ * oscillator on the module; needs a 22-pin 4-lane cable. Camera power-down
+ * (GPIO2_C0) and reset (GPIO2_C1) are held high.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			kray_cam_clk: kray-camera-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <24000000>;
+				clock-output-names = "kray_cam_clk";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio2>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-pdn", "camera-reset";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx283: imx283@1a {
+				compatible = "sony,imx283";
+				reg = <0x1a>;
+				clocks = <&kray_cam_clk>;
+				rockchip,camera-module-index = <0>;
+				rockchip,camera-module-facing = "back";
+				rockchip,camera-module-name = "imx283";
+				rockchip,camera-module-lens-name = "default";
+
+				port {
+					imx283_out: endpoint {
+						remote-endpoint = <&dphy0_in_imx283>;
+						data-lanes = <1 2 3 4>;
+						clock-noncontinuous;
+						link-frequencies = /bits/ 64 <720000000>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_imx283: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&imx283_out>;
+						data-lanes = <1 2 3 4>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};

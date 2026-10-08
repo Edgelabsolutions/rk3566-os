@@ -35,7 +35,7 @@ Two kernel branches are supported:
 | Ethernet 1 Gbps | ✅ | ✅ |
 | PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
 | Hailo-8 (M.2), HailoRT 4.24.0 | ❔ built, not tested on hardware | ❔ built, not tested on hardware |
-| Cameras (CSI-2): IMX477 (RPi HQ) / IMX219 (Camera v2) / IMX708 (Camera Module 3) / OV5647 (Camera v1) / IMX296 (Global Shutter), overlays `kray-som-rkc-imx477` / `-imx219` / `-imx708` / `-ov5647` / `-imx296` | ✅ IMX477: 2028x1520 at 30 fps, 4056x3040 at 10 fps (manual exposure, no auto white balance); ✅ IMX219: 1920x1080 at 30 fps, 3280x2464 at 21 fps; ❔ IMX708, OV5647, IMX296 not tested | ❌ no mainline ISP/CSI driver for RK3566 |
+| Cameras (CSI-2): IMX477 (RPi HQ) / IMX219 (Camera v2) / IMX708 (Camera Module 3) / OV5647 (Camera v1) / IMX296 (Global Shutter); third-party IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283 (see docs/camera.md) | ✅ IMX477: 2028x1520 at 30 fps, 4056x3040 at 10 fps (manual exposure, no auto white balance); ✅ IMX219: 1920x1080 at 30 fps, 3280x2464 at 21 fps; ❔ the others not tested | ❌ no mainline ISP/CSI driver for RK3566 |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
@@ -143,8 +143,8 @@ userpatches/
   u-boot/v2025.10/                         kray-som-rkc-rk3566 board for mainline U-Boot
   npu/npu-test/                            NPU test (npu_test.c, run.sh)
   hailo/kernel/                            Kconfig/Makefile to build hailo_pci in-tree
-  overlay/rk35xx-vendor-6.1/               vendor device tree overlays (IMX219 / IMX477 / IMX708 / OV5647 / IMX296 cameras)
-  camera/imx477/, camera/imx296/           IMX477 and IMX296 drivers (Raspberry Pi's, adapted for Rockchip)
+  overlay/rk35xx-vendor-6.1/               vendor device tree overlays (camera modules)
+  camera/<driver>/                         camera drivers from Raspberry Pi's kernel, adapted for Rockchip
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
   demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
 ```
