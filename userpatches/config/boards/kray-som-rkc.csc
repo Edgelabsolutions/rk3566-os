@@ -223,15 +223,18 @@ function custom_kernel_config__kray_som_rkc_imx296() {
 	opts_y+=("VIDEO_IMX296")
 }
 
-# Raspberry Pi Camera Module 3 (IMX708): the vendor tree has a Rockchip-style
-# imx708 driver that is off in the kernel config. Built in, like the other
-# camera drivers, so that it probes before the ISP stops waiting for sensors.
-# (Camera Module 1, OV5647, is already built in.)
-function custom_kernel_config__kray_som_rkc_imx708() {
+# Camera sensor drivers from the vendor tree (Rockchip-style) used by the
+# camera overlays: built in, so that they probe before the ISP stops waiting
+# for sensors. IMX708 (Camera Module 3) is off in the kernel config;
+# IMX327/IMX462 and OV9281 are modules there; OV5647 and OV7251 are already
+# built in. Rockchip's imx378 driver (4-lane modules) is switched off:
+# sony,imx378 is handled by the imx477 driver (2-lane modules).
+function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	kernel_config_modifying_hashes+=("imx708=y")
+	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281=y;imx378=n")
 	[[ -f .config ]] || return 0
-	opts_y+=("VIDEO_IMX708")
+	opts_y+=("VIDEO_IMX708" "VIDEO_IMX327" "VIDEO_OV9281")
+	opts_n+=("VIDEO_IMX378")
 }
 
 # Firmware (redistributed in binary form with Hailo's EULA), device node
