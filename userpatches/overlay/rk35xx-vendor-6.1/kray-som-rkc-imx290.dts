@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: Sony IMX290 / IMX327 starlight camera module (colour; Raspberry Pi
+ * style) on the CSI connector. Vendor kernel only.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-imx290
+ *
+ * Raspberry Pi's imx290 driver (built in, userpatches/camera/rpi_imx290;
+ * the vendor kernel's own imx290 driver is switched off). Sensor on I2C1 at
+ * 0x1a, two MIPI CSI-2 lanes (445.5 MHz for 1080p, 297 MHz for 720p),
+ * 37.125 MHz oscillator on the module. For a monochrome module use
+ * "sony,imx290llr", for an IMX327 module "sony,imx327lqr". IMX327/IMX462
+ * modules also work with kray-som-rkc-imx327 (Rockchip's imx327 driver).
+ * Camera power-down (GPIO2_C0) and reset (GPIO2_C1) are held high.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			kray_cam_clk: kray-camera-clock {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <37125000>;
+				clock-output-names = "kray_cam_clk";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio2>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-pdn", "camera-reset";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx290: imx290@1a {
+				compatible = "sony,imx290lqr";
+				reg = <0x1a>;
+				clocks = <&kray_cam_clk>;
+				clock-names = "xclk";
+				clock-frequency = <37125000>;
+				rockchip,camera-module-index = <0>;
+				rockchip,camera-module-facing = "back";
+				rockchip,camera-module-name = "imx290";
+				rockchip,camera-module-lens-name = "default";
+
+				port {
+					imx290_out: endpoint {
+						remote-endpoint = <&dphy0_in_imx290>;
+						data-lanes = <1 2>;
+						link-frequencies = /bits/ 64 <445500000 297000000>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_imx290: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&imx290_out>;
+						data-lanes = <1 2>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};
