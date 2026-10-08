@@ -1,0 +1,16 @@
+config VIDEO_RPI_IMX415
+	tristate "Sony IMX415 sensor support (Raspberry Pi driver)"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select REGMAP_I2C
+	help
+	  The Sony IMX415 driver from Raspberry Pi's kernel (2 or 4 MIPI
+	  CSI-2 lanes, 3864x2192), with the bus configuration, frame interval
+	  and Rockchip module information the Rockchip CSI-2 D-PHY and ISP
+	  drivers need.
+
+	  The module is called rpi_imx415.
+
