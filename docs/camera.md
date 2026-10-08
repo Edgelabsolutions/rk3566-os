@@ -26,10 +26,13 @@ Third-party modules for Raspberry Pi (Arducam, Innomaker and others) with a sens
 | 13 MP | Sony IMX258 | `kray-som-rkc-imx258` | `0x10` | 2 | Raspberry Pi `imx258`, ported (`rpi_imx258`) |
 | 5 MP | Sony IMX335 | `kray-som-rkc-imx335` | `0x1a` | 2 | Raspberry Pi `imx335`, backported from Linux 6.12 (`rpi_imx335`) |
 | 8 MP (4K) | Sony IMX415 | `kray-som-rkc-imx415` | `0x37` | 2 | Raspberry Pi `imx415`, from Linux 6.6 (`rpi_imx415`) |
+| "Starlight" 2 MP | Sony IMX290 (colour; `sony,imx290llr` for monochrome, `sony,imx327lqr` for IMX327) | `kray-som-rkc-imx290` | `0x1a` | 2 | Raspberry Pi `imx290` (37.125 MHz oscillator, `rpi_imx290`) |
+| Global shutter, monochrome 2 MP | OmniVision OV2311 | `kray-som-rkc-ov2311` | `0x60` | 2 | Raspberry Pi `ov2311`, ported (`rpi_ov2311`) |
+| Global shutter 2.2 MP, NIR-enhanced | ams Mira220 | `kray-som-rkc-mira220` | `0x54` | 2 | Raspberry Pi `mira220` (38.4 MHz oscillator), ported (`rpi_mira220`) |
 
-The vendor kernel's own IMX258, IMX335 and IMX415 drivers do not fit the Raspberry Pi modules (they need 4 lanes or a 37.125/27 MHz clock; the modules have 2 lanes and 24 MHz), so these sensors use Raspberry Pi's drivers (named `rpi_imx258`, `rpi_imx335`, `rpi_imx415` so they sit next to Rockchip's) and Rockchip's are switched off. IMX290 modules use a different driver in the vendor kernel (no Rockchip ISP support); the IMX327 overlay may work with them (same register map) but this is untested. OV2311, Mira220 and the IRS1125 time-of-flight sensor have no driver here. The autofocus motors of the Arducam 16 MP and 64 MP modules (AK7375, DW9817) have no driver either: their lenses stay at the rest position.
+The vendor kernel's own IMX258, IMX335 and IMX415 drivers do not fit the Raspberry Pi modules (they need 4 lanes or a 37.125/27 MHz clock; the modules have 2 lanes and 24 MHz), so these sensors use Raspberry Pi's drivers (named `rpi_imx258`, `rpi_imx335`, `rpi_imx415` so they sit next to Rockchip's) and Rockchip's are switched off. The vendor kernel's IMX290 driver is the mainline one without Rockchip ISP support; it is switched off and IMX290 modules use Raspberry Pi's (`rpi_imx290`). IMX327/IMX462 modules can use either `kray-som-rkc-imx327` (Rockchip's driver) or `kray-som-rkc-imx290` with `sony,imx327lqr`. The IRS1125 time-of-flight sensor has no driver here. The autofocus motors of the Arducam 16 MP and 64 MP modules (AK7375, DW9817) have no driver either: their lenses stay at the rest position.
 
-The ported Raspberry Pi drivers (IMX477, IMX296, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415) live in `userpatches/camera/<driver>/`; one kernel hook copies each into the kernel tree and builds it in. IMX283 comes from Linux 6.12: the port carries the CCI register helpers and `v4l2_link_freq_to_bitmap()` from newer kernels and runs its streams through `s_stream`.
+The ported Raspberry Pi drivers (IMX477, IMX296, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220) live in `userpatches/camera/<driver>/`; one kernel hook copies each into the kernel tree and builds it in. IMX283 comes from Linux 6.12: the port carries the CCI register helpers and `v4l2_link_freq_to_bitmap()` from newer kernels and runs its streams through `s_stream`; IMX335 and Mira220 (Linux 6.12, Raspberry Pi's rpi-6.12.y) are backported the same way.
 
 The RK3566 ISP has been tested up to 4056x3040 (IMX477). The larger sensors therefore start in a binned mode: IMX519 2328x1748, Arducam 64 MP 2312x1736. Their full-resolution modes (4656x3496, 9152x6944) and the IMX283's 5472x3648 exceed what has been tested on the ISP and may not work.
 
@@ -55,6 +58,9 @@ The IMX219, IMX708 and OV5647 drivers are the vendor kernel's own (Rockchip vers
 | IMX258 | 2104x1560 (default, binned; about 15 fps on 2 lanes), 1048x780; full 4208x3120 untested on the ISP |
 | IMX335 | 2592x1944 (about 30 fps, 12-bit), 1312x972 (2x2 binned, 10-bit) |
 | IMX415 | 3864x2192 (720 Mbit/s per lane with the 24 MHz module oscillator) |
+| IMX290 | 1920x1080 (60 fps), 1280x720 (60 fps), 10/12-bit |
+| OV2311 | 1600x1300 (60 fps, 10-bit monochrome) |
+| Mira220 | 1600x1400 (12-bit Bayer) |
 
 Camera Module 3: the lens focus motor has no driver in the vendor kernel, so the lens stays at its rest position (focused far, roughly beyond 1 m); there is no autofocus.
 
@@ -62,10 +68,10 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 
 | Part | Where |
 |---|---|
-| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647,imx296,imx327,ov9281,ov7251,imx378,imx519,arducam-64mp,imx283,imx258,imx335,imx415}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
+| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647,imx296,imx327,ov9281,ov7251,imx378,imx519,arducam-64mp,imx283,imx258,imx335,imx415,imx290,ov2311,mira220}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
 | Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` (1 for the IMX296 and OV7251, 4 for the IMX283) |
 | Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
-| Kernel | `imx219`, `imx477` (also IMX378), `imx708`, `ov5647`, `imx296`, `imx327`, `ov9281`, `ov7251`, `imx519`, `arducam_64mp`, `imx283`, `rpi_imx258`, `rpi_imx335`, `rpi_imx415` drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
+| Kernel | `imx219`, `imx477` (also IMX378), `imx708`, `ov5647`, `imx296`, `imx327`, `ov9281`, `ov7251`, `imx519`, `arducam_64mp`, `imx283`, `rpi_imx258`, `rpi_imx335`, `rpi_imx415`, `rpi_imx290`, `rpi_ov2311`, `rpi_mira220` drivers, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 
 ## Enable
@@ -83,7 +89,7 @@ The commands below remove any camera overlay that is already on the line, keep o
 ### Raspberry Pi Camera v2 (IMX219)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx219/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx219' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -91,7 +97,7 @@ sudo reboot
 ### Raspberry Pi HQ Camera (IMX477)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx477/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx477' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -99,7 +105,7 @@ sudo reboot
 ### Raspberry Pi Camera Module 3 (IMX708)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx708/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx708' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -107,7 +113,7 @@ sudo reboot
 ### Raspberry Pi Camera Module 1 (OV5647)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-ov5647/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-ov5647' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -115,17 +121,17 @@ sudo reboot
 ### Raspberry Pi Global Shutter Camera (IMX296)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx296/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx296' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
 
 ### Third-party modules
 
-The same two commands with the module's overlay name (`kray-som-rkc-imx327`, `-ov9281`, `-ov7251`, `-imx378`, `-imx519`, `-arducam-64mp`, `-imx283`, `-imx258`, `-imx335` or `-imx415`), e.g. for an IMX462 starlight module:
+The same two commands with the module's overlay name (`kray-som-rkc-imx327`, `-ov9281`, `-ov7251`, `-imx378`, `-imx519`, `-arducam-64mp`, `-imx283`, `-imx258`, `-imx335`, `-imx415`, `-imx290`, `-ov2311` or `-mira220`), e.g. for an IMX462 starlight module:
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx327/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx327' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -137,7 +143,7 @@ Power off, swap the module, boot, run the commands for the new camera and reboot
 ### Disable
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 sudo reboot
 ```
 
@@ -151,7 +157,7 @@ sudo reboot
 
 ```bash
 dmesg | grep -iE 'imx|ov[0-9]|rkisp|csi2'
-i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708, IMX296, IMX327, IMX378, IMX519, Arducam 64 MP, IMX283, IMX335) or 36 (OV5647), 60 (OV9281, OV7251), 10 (IMX258), 37 (IMX415); "UU" once the driver has it
+i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708, IMX296, IMX327, IMX378, IMX519, Arducam 64 MP, IMX283, IMX335, IMX290) or 36 (OV5647), 60 (OV9281, OV7251, OV2311), 10 (IMX258), 37 (IMX415), 54 (Mira220); "UU" once the driver has it
 v4l2-ctl --list-devices          # rkisp_mainpath, rkisp_selfpath, ...
 media-ctl -d /dev/media0 -p      # sensor -> csi2-dphy0 -> rkisp-isp-subdev -> rkisp_mainpath
 ```
@@ -234,7 +240,7 @@ White balance and colour correction stay at the ISP defaults. For machine vision
 - **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above (manual exposure).
 - **IMX708 (Camera Module 3) and OV5647 (Camera Module 1)**: overlays and drivers build; not yet tested with a module.
 - **IMX296 (Global Shutter Camera)**: ported driver and overlay build; not yet tested with a module.
-- **Third-party modules (IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415)**: overlays and drivers build; not yet tested with a module. Third-party modules differ in pinout, power and oscillator, so check the module's data first.
+- **Third-party modules (IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220)**: overlays and drivers build; not yet tested with a module. Third-party modules differ in pinout, power and oscillator, so check the module's data first.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above (manual exposure).
 
 There is no auto exposure or white balance in either case, see above.

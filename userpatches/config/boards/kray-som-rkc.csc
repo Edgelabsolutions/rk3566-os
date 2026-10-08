@@ -183,8 +183,8 @@ function custom_kernel_config__kray_som_rkc_overlays() {
 # CSI-2 D-PHY and ISP (userpatches/camera/<driver>/: <driver>.c + Kconfig):
 # imx477 (HQ Camera, also IMX378), imx296 (Global Shutter Camera), imx519
 # (Arducam 16 MP), arducam_64mp (Arducam 64 MP), imx283 (1-inch 20 MP),
-# rpi_imx258, rpi_imx335, rpi_imx415 (named apart from Rockchip's drivers for
-# the same sensors).
+# rpi_imx258, rpi_imx335, rpi_imx415, rpi_imx290 (named apart from the vendor
+# kernel's drivers for the same sensors), rpi_ov2311, rpi_mira220.
 # Copied into the kernel tree and built in: as modules they would probe after
 # the ISP has stopped waiting for its sensor.
 function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
@@ -216,15 +216,16 @@ function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 # for sensors. IMX708 (Camera Module 3) is off in the kernel config;
 # IMX327/IMX462 and OV9281 are modules there; OV5647 and OV7251 are already
 # built in. Rockchip's imx378, imx258, imx335 and imx415 drivers (4-lane or
-# 27/37.125 MHz modules) are switched off: those sensors are handled by
+# 27/37.125 MHz modules) and the mainline imx290 driver (no Rockchip ISP
+# support) are switched off: those sensors are handled by
 # Raspberry Pi's drivers (userpatches/camera), which work with the 2-lane,
 # 24 MHz Raspberry Pi modules.
 function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281=y;imx378,imx258,imx335,imx415=n")
+	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281=y;imx378,imx258,imx335,imx415,imx290=n")
 	[[ -f .config ]] || return 0
 	opts_y+=("VIDEO_IMX708" "VIDEO_IMX327" "VIDEO_OV9281")
-	opts_n+=("VIDEO_IMX378" "VIDEO_IMX258" "VIDEO_IMX335" "VIDEO_IMX415")
+	opts_n+=("VIDEO_IMX378" "VIDEO_IMX258" "VIDEO_IMX335" "VIDEO_IMX415" "VIDEO_IMX290")
 }
 
 # Firmware (redistributed in binary form with Hailo's EULA), device node
@@ -319,7 +320,7 @@ function post_customize_image__kray_som_rkc_demo() {
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
-		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
 			"${SDCARD}/boot/armbianEnv.txt"
 	else
 		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"

@@ -1,0 +1,16 @@
+config VIDEO_RPI_MIRA220
+	tristate "ams Mira220 sensor support (Raspberry Pi driver)"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select REGMAP_I2C
+	help
+	  Raspberry Pi's driver for the ams Mira220 global shutter NIR
+	  sensor (1600x1400, 2 MIPI CSI-2 lanes, 38.4 MHz input clock),
+	  backported to Linux 6.1, with the bus configuration and frame
+	  interval calls the Rockchip CSI-2 D-PHY and ISP drivers need.
+
+	  The module is called rpi_mira220.
+
