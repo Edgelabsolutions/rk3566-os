@@ -179,49 +179,35 @@ function custom_kernel_config__kray_som_rkc_overlays() {
 	done
 }
 
-# Sony IMX477 (Raspberry Pi HQ Camera) for the vendor kernel: Raspberry Pi's
-# driver with the calls Rockchip's CSI-2 D-PHY and ISP need
-# (userpatches/camera/imx477). Built in like imx219: as a module it probes
-# after rkisp has given up waiting for its sensor ("clear unready subdev"),
-# and the sensor never gets linked to csi2-dphy0. Used by the
-# kray-som-rkc-imx477 overlay.
-function custom_kernel_config__kray_som_rkc_imx477() {
+# Camera sensor drivers from Raspberry Pi's kernel, adapted for the Rockchip
+# CSI-2 D-PHY and ISP (userpatches/camera/<driver>/: <driver>.c + Kconfig):
+# imx477 (HQ Camera, also IMX378), imx296 (Global Shutter Camera), imx519
+# (Arducam 16 MP), arducam_64mp (Arducam 64 MP), imx283 (1-inch 20 MP).
+# Copied into the kernel tree and built in: as modules they would probe after
+# the ISP has stopped waiting for its sensor.
+function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	local src="${USERPATCHES_PATH}/camera/imx477"
-	kernel_config_modifying_hashes+=("imx477=y-$(cat "${src}"/* | sha256sum | cut -c1-16)")
+	local cam="${USERPATCHES_PATH}/camera"
+	kernel_config_modifying_hashes+=("rpi-cameras=y-$(cat "${cam}"/*/* | sha256sum | cut -c1-16)")
 	[[ -f .config ]] || return 0
 
-	local dir="${kernel_work_dir}/drivers/media/i2c"
-	cp "${src}/imx477.c" "${dir}/"
-	if ! grep -q 'config VIDEO_IMX477' "${dir}/Kconfig"; then
-		sed -i "/^config VIDEO_IMX378$/e cat ${src}/Kconfig" "${dir}/Kconfig"
-		grep -q 'config VIDEO_IMX477' "${dir}/Kconfig" ||
-			exit_with_error "Could not add VIDEO_IMX477 to ${dir}/Kconfig"
-	fi
-	grep -q 'CONFIG_VIDEO_IMX477' "${dir}/Makefile" ||
-		echo 'obj-$(CONFIG_VIDEO_IMX477) += imx477.o' >> "${dir}/Makefile"
-	opts_y+=("VIDEO_IMX477")
+	local dir="${kernel_work_dir}/drivers/media/i2c" src name sym
+	for src in "${cam}"/*/; do
+		name="$(basename "${src}")"
+		sym="$(sed -n 's/^config \(VIDEO_[A-Z0-9_]*\)$/\1/p' "${src}/Kconfig")"
+		[[ -f "${src}/${name}.c" && -n "${sym}" ]] || exit_with_error "Bad camera driver directory ${src}"
+		cp "${src}/${name}.c" "${dir}/"
+		if ! grep -q "^config ${sym}$" "${dir}/Kconfig"; then
+			sed -i "/^config VIDEO_IMX378$/e cat ${src}/Kconfig" "${dir}/Kconfig"
+			grep -q "^config ${sym}$" "${dir}/Kconfig" ||
+				exit_with_error "Could not add ${sym} to ${dir}/Kconfig"
+		fi
+		grep -q "CONFIG_${sym})" "${dir}/Makefile" ||
+			echo "obj-\$(CONFIG_${sym}) += ${name}.o" >> "${dir}/Makefile"
+		opts_y+=("${sym}")
+	done
 }
 
-# Raspberry Pi Global Shutter Camera (IMX296): Raspberry Pi's imx296 driver
-# with Rockchip glue (userpatches/camera/imx296), built in like imx477.
-function custom_kernel_config__kray_som_rkc_imx296() {
-	[[ "${BRANCH}" == "vendor" ]] || return 0
-	local src="${USERPATCHES_PATH}/camera/imx296"
-	kernel_config_modifying_hashes+=("imx296=y-$(cat "${src}"/* | sha256sum | cut -c1-16)")
-	[[ -f .config ]] || return 0
-
-	local dir="${kernel_work_dir}/drivers/media/i2c"
-	cp "${src}/imx296.c" "${dir}/"
-	if ! grep -q 'config VIDEO_IMX296' "${dir}/Kconfig"; then
-		sed -i "/^config VIDEO_IMX378$/e cat ${src}/Kconfig" "${dir}/Kconfig"
-		grep -q 'config VIDEO_IMX296' "${dir}/Kconfig" ||
-			exit_with_error "Could not add VIDEO_IMX296 to ${dir}/Kconfig"
-	fi
-	grep -q 'CONFIG_VIDEO_IMX296' "${dir}/Makefile" ||
-		echo 'obj-$(CONFIG_VIDEO_IMX296) += imx296.o' >> "${dir}/Makefile"
-	opts_y+=("VIDEO_IMX296")
-}
 
 # Camera sensor drivers from the vendor tree (Rockchip-style) used by the
 # camera overlays: built in, so that they probe before the ISP stops waiting
@@ -329,7 +315,7 @@ function post_customize_image__kray_som_rkc_demo() {
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
-		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx\|ov\)[0-9]*//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
 			"${SDCARD}/boot/armbianEnv.txt"
 	else
 		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"
