@@ -35,7 +35,7 @@ Two kernel branches are supported:
 | Ethernet 1 Gbps | ✅ | ✅ |
 | PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
 | Hailo-8 (M.2), HailoRT 4.24.0 | ❔ built, not tested on hardware | ❔ built, not tested on hardware |
-| Cameras (CSI-2): IMX477 (RPi HQ) / IMX219 (Camera v2) / IMX708 (Camera Module 3) / OV5647 (Camera v1) / IMX296 (Global Shutter); third-party IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220 (see docs/camera.md) | ✅ IMX477: 2028x1520 at 30 fps, 4056x3040 at 10 fps (manual exposure, no auto white balance); ✅ IMX219: 1920x1080 at 30 fps, 3280x2464 at 21 fps; ❔ the others not tested | ❌ no mainline ISP/CSI driver for RK3566 |
+| Cameras (CSI-2): IMX477 (RPi HQ) / IMX219 (Camera v2) / IMX708 (Camera Module 3) / OV5647 (Camera v1) / IMX296 (Global Shutter); third-party IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220; manual lens focus (Camera Module 3, Arducam 16/64 MP); HDMI input via TC358743 (see docs/camera.md) | ✅ IMX477: 2028x1520 at 30 fps, 4056x3040 at 10 fps (manual exposure, no auto white balance); ✅ IMX219: 1920x1080 at 30 fps, 3280x2464 at 21 fps; ❔ the others not tested | ❌ no mainline ISP/CSI driver for RK3566 |
 | USB 2.0 host (hubs, RTL8153 Ethernet) | ✅ | ✅ |
 | USB WiFi RTL8821AU | ✅ `88XXau` | ✅ `rtw88_8821au` |
 | USB-C OTG (peripheral mode) | ❔ not tested | ✅ UDC `fcc00000.usb` |
