@@ -8,8 +8,10 @@
  * Sensor on I2C1 at 0x1a, two MIPI CSI-2 lanes at 450 MHz through
  * csi2_dphy0 into rkisp (rkisp_vir0). The module has its own 24 MHz
  * oscillator. Camera power-down (GPIO2_C0) and reset (GPIO2_C1) are held
- * high, as for the other camera overlays. The lens focus motor has no driver
- * here, so the focus stays at its rest position (far).
+ * high, as for the other camera overlays. The lens focus motor (DW9817 at
+ * 0x0c, Raspberry Pi's dw9807-vcm driver, built in as rpi_dw9807_vcm) is a
+ * separate lens sub-device: set the focus by hand with its
+ * focus_absolute control (no autofocus without 3A).
  */
 
 /dts-v1/;
@@ -53,6 +55,11 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
+			kray_cam_vcm: dw9817@c {
+				compatible = "dongwoon,dw9817-vcm";
+				reg = <0x0c>;
+			};
+
 			imx708: imx708@1a {
 				compatible = "sony,imx708";
 				reg = <0x1a>;
@@ -62,6 +69,7 @@
 				rockchip,camera-module-facing = "back";
 				rockchip,camera-module-name = "rpi-camera-v3";
 				rockchip,camera-module-lens-name = "default";
+				lens-focus = <&kray_cam_vcm>;
 
 				port {
 					imx708_out: endpoint {

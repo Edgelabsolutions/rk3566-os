@@ -1,0 +1,11 @@
+[Unit]
+Description=Kray-SoM-RKC HDMI input (TC358743) EDID
+After=systemd-udev-settle.service
+ConditionPathExistsGlob=/sys/class/video4linux/v4l-subdev*
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/kray-som-rkc/kray-hdmi-in-edid
+
+[Install]
+WantedBy=multi-user.target

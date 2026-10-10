@@ -1,0 +1,34 @@
+#!/bin/sh
+# Kray-SoM-RKC: EDID for the TC358743 HDMI-to-CSI bridge (vendor kernel).
+#
+# The Rockchip tc35874x driver loads an EDID that offers 1080p60. Over two
+# CSI-2 lanes (at most 1 Gbit/s each) the bridge can carry 1080p30, 720p60
+# or less, so with a 2-lane overlay (kray-som-rkc-tc358743) this replaces it
+# with an EDID whose best mode is 1080p30. The 4-lane overlay keeps the
+# driver's EDID.
+#
+#   KRAY_HDMI_IN_EDID in /etc/default/kray-hdmi-in: another EDID file
+#   (hex, as v4l2-ctl --get-edid=format=hex writes it), or "driver" to keep
+#   the driver's EDID.
+EDID=/usr/share/kray-som-rkc/tc358743-edid-1080p30.hex
+[ -r /etc/default/kray-hdmi-in ] && . /etc/default/kray-hdmi-in
+EDID=${KRAY_HDMI_IN_EDID:-$EDID}
+
+subdev=
+for n in /sys/class/video4linux/v4l-subdev*; do
+	grep -qs tc35874x "$n/name" && subdev=/dev/${n##*/} && break
+done
+[ -n "$subdev" ] || { echo "kray-hdmi-in-edid: no TC358743 sub-device"; exit 0; }
+
+lanes=0
+for f in /proc/device-tree/*/tc35874x@*/port/endpoint/data-lanes \
+	 /proc/device-tree/*/tc358743@*/port/endpoint/data-lanes; do
+	[ -r "$f" ] && lanes=$(( $(stat -c %s "$f") / 4 )) && break
+done
+
+if [ "$EDID" = driver ] || { [ "$lanes" -ne 2 ] && [ -z "$KRAY_HDMI_IN_EDID" ]; }; then
+	echo "kray-hdmi-in-edid: $subdev, $lanes lanes: keeping the driver's EDID"
+	exit 0
+fi
+echo "kray-hdmi-in-edid: $subdev, $lanes lanes: EDID $EDID"
+exec v4l2-ctl -d "$subdev" --set-edid=file="$EDID",format=hex

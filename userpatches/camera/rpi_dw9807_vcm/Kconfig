@@ -1,0 +1,13 @@
+config VIDEO_RPI_DW9807_VCM
+	tristate "DW9807/DW9817 lens voice coil support (Raspberry Pi driver)"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_ASYNC
+	help
+	  Raspberry Pi's driver for the Dongwoon DW9807 and DW9817 voice coil
+	  lens drivers: the focus motors of the Raspberry Pi Camera Module 3
+	  and the Arducam 64 MP module. Focus is set with the
+	  V4L2_CID_FOCUS_ABSOLUTE control on the lens sub-device.
+
+	  The module is called rpi_dw9807_vcm.

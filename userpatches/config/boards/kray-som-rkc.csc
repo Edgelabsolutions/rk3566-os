@@ -220,12 +220,31 @@ function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 # support) are switched off: those sensors are handled by
 # Raspberry Pi's drivers (userpatches/camera), which work with the 2-lane,
 # 24 MHz Raspberry Pi modules.
+#
+# Lens focus motors: AK7375 (Arducam 16 MP / IMX519) is built in; the
+# mainline dw9807-vcm is switched off for Raspberry Pi's rpi_dw9807_vcm, which
+# also drives the DW9817 of Camera Module 3 and the Arducam 64 MP. HDMI input:
+# Rockchip's tc35874x TC358743 driver is already built in; the mainline
+# tc358743 driver for the same chip is switched off.
 function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281=y;imx378,imx258,imx335,imx415,imx290=n")
+	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281,ak7375=y;imx378,imx258,imx335,imx415,imx290,dw9807,tc358743=n")
 	[[ -f .config ]] || return 0
-	opts_y+=("VIDEO_IMX708" "VIDEO_IMX327" "VIDEO_OV9281")
-	opts_n+=("VIDEO_IMX378" "VIDEO_IMX258" "VIDEO_IMX335" "VIDEO_IMX415" "VIDEO_IMX290")
+	opts_y+=("VIDEO_IMX708" "VIDEO_IMX327" "VIDEO_OV9281" "VIDEO_AK7375")
+	opts_n+=("VIDEO_IMX378" "VIDEO_IMX258" "VIDEO_IMX335" "VIDEO_IMX415" "VIDEO_IMX290"
+		"VIDEO_DW9807_VCM" "VIDEO_TC358743")
+}
+
+# Camera helpers for the vendor image: kray-hdmi-in-edid.service loads an
+# EDID that fits two CSI-2 lanes when the 2-lane TC358743 overlay is enabled
+# (it does nothing without a TC358743).
+function post_customize_image__kray_som_rkc_camera_tools() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/camera-tools"
+	install -D -m 0755 "${src}/kray-hdmi-in-edid" "${SDCARD}/usr/lib/kray-som-rkc/kray-hdmi-in-edid"
+	install -D -m 0644 "${src}/tc358743-edid-1080p30.hex" "${SDCARD}/usr/share/kray-som-rkc/tc358743-edid-1080p30.hex"
+	install -D -m 0644 "${src}/kray-hdmi-in-edid.service" "${SDCARD}/usr/lib/systemd/system/kray-hdmi-in-edid.service"
+	chroot_sdcard systemctl enable kray-hdmi-in-edid.service
 }
 
 # Firmware (redistributed in binary form with Hailo's EULA), device node
@@ -320,7 +339,7 @@ function post_customize_image__kray_som_rkc_demo() {
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
-		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
 			"${SDCARD}/boot/armbianEnv.txt"
 	else
 		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"
