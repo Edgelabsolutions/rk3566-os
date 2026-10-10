@@ -1,0 +1,12 @@
+[Unit]
+Description=Kray-SoM-RKC camera auto exposure and white balance
+After=systemd-udev-settle.service
+ConditionPathExistsGlob=/sys/class/video4linux/video*
+
+[Service]
+ExecStart=/usr/bin/kray-cam-3a
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
