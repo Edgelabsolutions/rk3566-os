@@ -211,11 +211,24 @@ MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && 
 media-ctl -d $MD --set-v4l2 '"m00_b_imx219 1-0010":0[fmt:SRGGB10_1X10/1920x1080]'
 ```
 
-## Image quality: no auto exposure or white balance
+## Image quality: auto exposure and white balance
 
-On Rockchip SoCs auto exposure, auto white balance and the ISP's colour and noise tuning run in user space in Rockchip's `rkaiq`, with a tuning (IQ) file per sensor. The image does not include it: there is no tuning file for the IMX477 or the IMX219, and the `rkaiq` available for this kernel (AIQ v6.0x8.0) programmed the ISP once but did not run 3A on Kray-SoM-RKC.
+On Rockchip SoCs auto exposure, auto white balance and the ISP's colour and noise tuning normally run in user space in Rockchip's `rkaiq`, with a tuning (IQ) file per sensor. The image does not include it: there is no tuning file for the Raspberry Pi sensors, and the `rkaiq` available for this kernel (AIQ v6.0x8.0) programmed the ISP once but did not run 3A on Kray-SoM-RKC.
 
-Without it the ISP runs on its default parameters and the sensor keeps the exposure and gain it is given, so images come out dark with a colour cast. Set exposure and analogue gain on the sensor by hand:
+Instead the vendor image runs `kray-cam-3a.service`, a small replacement for the 3A part:
+
+- it takes `rkaiq`'s place in the ISP driver's protocol: when a program starts the camera, the ISP waits for its first parameters, which switch on the raw statistics (15x15 windows with mean R, G and B), black level subtraction and an output gamma;
+- **auto exposure**: sets the sensor's exposure, then its gain, to bring the mean level to a target;
+- **auto white balance** (grey world): sets the ISP's red and blue gains so that near-neutral areas come out grey.
+
+It works with any capture program (`v4l2-ctl`, GStreamer, OpenCV, your own); nothing has to be changed there. Settings are in `/etc/kray-cam-3a.conf` (target level, exposure and gain limits, fixed white balance, gamma); after a change:
+
+```bash
+sudo systemctl restart kray-cam-3a
+journalctl -u kray-cam-3a -f        # what it does; kray-cam-3a -v prints every step
+```
+
+What it does not do: colour correction (CCM), lens shading correction (the corners of the picture are darker and slightly tinted), noise reduction and sharpening tuning stay at the ISP defaults, and there is no autofocus. With `kray-cam-3a` stopped (`sudo systemctl disable --now kray-cam-3a`) the ISP runs on its defaults and the sensor keeps the exposure and gain it is given; set them by hand:
 
 ```bash
 MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
@@ -224,16 +237,7 @@ v4l2-ctl -d $SD --list-ctrls                                  # ranges
 v4l2-ctl -d $SD --set-ctrl=exposure=1500,analogue_gain=600    # lines; gain register 0-978
 ```
 
-For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 = 2x, 768 = 4x, 978 = about 22x); exposure is in lines (in 2028x1520 mode one line is about 20 us). For the IMX219 use only the `gain` control: the vendor driver maps `gain` and `analogue_gain` to the same total gain (the one set last wins). Up to 2728 (10.66x) it is analogue gain; above that the driver adds digital gain, up to 43663. In the 1920x1080 mode a frame is 1766 lines, so `exposure` can go up to about 1760:
-
-```bash
-SD=$(media-ctl -d $MD -e "m00_b_imx219 1-0010")
-v4l2-ctl -d $SD -c exposure=1760 -c gain=5456      # 10.66x analogue x 2x digital
-```
-
-In ordinary room light `gain=5456` to `10912` (2x to 4x digital on top of full analogue gain) gives a normally exposed image at 30 fps; `2728` (analogue only) is somewhat dark.
-
-White balance and colour correction stay at the ISP defaults. For machine vision this is often enough; for natural colours, an application can correct white balance on the NV12 frames, or capture raw Bayer and process it itself.
+For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 = 2x, 768 = 4x, 978 = about 22x); exposure is in lines (in 2028x1520 mode one line is about 20 us). For the IMX219 use only the `gain` control (256 = 1x): the vendor driver maps `gain` and `analogue_gain` to the same total gain (the one set last wins). Up to 2728 (10.66x) it is analogue gain; above that the driver adds digital gain, up to 43663. The sensor drivers reset exposure and gain when streaming starts, so set them while the camera streams.
 
 ## Lens focus
 
@@ -278,11 +282,11 @@ Audio over HDMI (the bridge's I2S output) is not connected.
 
 ## Status
 
-- **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above (manual exposure).
+- **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above.
 - **IMX708 (Camera Module 3) and OV5647 (Camera Module 1)**: overlays and drivers build; not yet tested with a module.
 - **IMX296 (Global Shutter Camera)**: ported driver and overlay build; not yet tested with a module.
 - **Third-party modules (IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220)**: overlays and drivers build; not yet tested with a module. Third-party modules differ in pinout, power and oscillator, so check the module's data first.
 - **Lens focus (Camera Module 3, Arducam 16 and 64 MP) and HDMI input (TC358743)**: drivers, overlays and the EDID service build; not yet tested with hardware.
-- **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above (manual exposure).
+- **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above.
 
-There is no auto exposure or white balance in either case, see above.
+Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219.

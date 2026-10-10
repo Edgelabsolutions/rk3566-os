@@ -235,12 +235,29 @@ function custom_kernel_config__kray_som_rkc_camera_drivers() {
 		"VIDEO_DW9807_VCM" "VIDEO_TC358743")
 }
 
-# Camera helpers for the vendor image: kray-hdmi-in-edid.service loads an
-# EDID that fits two CSI-2 lanes when the 2-lane TC358743 overlay is enabled
-# (it does nothing without a TC358743).
+# Camera helpers for the vendor image:
+# - kray-cam-3a.service: auto exposure and white balance for the camera
+#   (docs/camera.md), built here with the cross compiler; the demo image
+#   keeps it off (kray-demo has its own);
+# - kray-hdmi-in-edid.service loads an EDID that fits two CSI-2 lanes when
+#   the 2-lane TC358743 overlay is enabled (it does nothing without one).
 function post_customize_image__kray_som_rkc_camera_tools() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	local src="${USERPATCHES_PATH}/camera-tools"
+	local cxx="${KRAY_CROSS_COMPILE:-aarch64-linux-gnu-}g++"
+	if command -v "${cxx}" > /dev/null; then
+		display_alert "$BOARD" "Building kray-cam-3a" "info"
+		"${cxx}" -O2 -Wall -std=c++17 -I"${USERPATCHES_PATH}/demo/src/uapi" \
+			-o "${SDCARD}/usr/bin/kray-cam-3a" "${src}/kray-cam-3a/kray-cam-3a.cpp" \
+			-static-libstdc++ -static-libgcc ||
+			exit_with_error "kray-cam-3a did not build"
+		"${cxx%g++}strip" "${SDCARD}/usr/bin/kray-cam-3a"
+		install -D -m 0644 "${src}/kray-cam-3a/kray-cam-3a.conf" "${SDCARD}/etc/kray-cam-3a.conf"
+		install -D -m 0644 "${src}/kray-cam-3a/kray-cam-3a.service" "${SDCARD}/usr/lib/systemd/system/kray-cam-3a.service"
+		[[ "${KRAY_DEMO:-no}" == "yes" ]] || chroot_sdcard systemctl enable kray-cam-3a.service
+	else
+		display_alert "$BOARD" "No ${cxx}: kray-cam-3a left out" "wrn"
+	fi
 	install -D -m 0755 "${src}/kray-hdmi-in-edid" "${SDCARD}/usr/lib/kray-som-rkc/kray-hdmi-in-edid"
 	install -D -m 0644 "${src}/tc358743-edid-1080p30.hex" "${SDCARD}/usr/share/kray-som-rkc/tc358743-edid-1080p30.hex"
 	install -D -m 0644 "${src}/kray-hdmi-in-edid.service" "${SDCARD}/usr/lib/systemd/system/kray-hdmi-in-edid.service"
