@@ -31,7 +31,7 @@ Two kernel branches are supported:
 | Component | vendor 6.1 | current 6.18 |
 |---|---|---|
 | DDR3L / LPDDR4X, U-Boot, RK809 PMIC | ✅ | ✅ |
-| microSD (High Speed, 50 MHz) | ✅ | ✅ |
+| microSD (UHS-I SDR104, 150 MHz; High Speed for non-UHS cards) | ✅ about 68 MB/s read, 51 MB/s write | ❔ SDR104 not tested |
 | Ethernet 1 Gbps | ✅ | ✅ |
 | PCIe 2.0 x1 (M.2) | ✅ Gen2 x1, NVMe 379 MB/s | ❔ not tested |
 | Hailo-8 (M.2), HailoRT 4.24.0 | ❔ built, not tested on hardware | ❔ built, not tested on hardware |
@@ -153,7 +153,7 @@ userpatches/
 
 - **U-Boot.** Mainline U-Boot 2025.10 with its own board (`kray-som-rkc-rk3566_defconfig`) whose DTS describes the RK809. U-Boot enables the `regulator-boot-on` rails, `vdd_npu` among them. Without that the vendor kernel panics with `panic_on_set_idle` while powering up the NPU power domain.
 - **DDR.** `rk3566_ddr_1056MHz_v1.21.bin`, BL31 `rk3568_bl31_v1.44.elf`.
-- **microSD.** `sd-uhs-sdr104` is disabled: SDR104 tuning fails (`All phases bad`), so the card runs in High Speed mode.
+- **microSD.** UHS-I cards run in SDR104 at 150 MHz. The SD pins run at drive strength level 5: with the SoC default (level 2) SDR104 tuning fails (`All phases bad`). If tuning fails anyway, the kernel falls back to High Speed (50 MHz).
 - **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
 - **Ethernet PHY.** Realtek RTL8211F-CG at MDIO address 1, clocked by its own 25 MHz crystal (`clock_in_out = "input"`), RGMII delays `tx_delay=0x24`, `rx_delay=0x08`. Its reset (ETH_GMAC_RSTn) is on GPIO3_C0 and is pulsed and released by stmmac at probe; a PHY held in reset keeps its internal 1.0 V regulator off and does not answer on MDIO. The LubanCat Zero N reference board wires its PHY differently (address 0, reset on GPIO2_B0, clock from the SoC) and uses `rk3566-lubancat-zero-n.dtb`.
 - **PCIe.** `pcie2x1` over `combphy2` to the M.2 slot. The slot's 3.3 V is switched by PCIe_PWR_EN on GPIO0_A6 (`vcc3v3_pcie`, enabled before the link comes up), PERST# is GPIO1_B2.
