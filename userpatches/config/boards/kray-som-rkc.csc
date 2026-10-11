@@ -225,14 +225,16 @@ function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 # mainline dw9807-vcm is switched off for Raspberry Pi's rpi_dw9807_vcm, which
 # also drives the DW9817 of Camera Module 3 and the Arducam 64 MP. HDMI input:
 # Rockchip's tc35874x TC358743 driver is already built in; the mainline
-# tc358743 driver for the same chip is switched off.
+# tc358743 driver for the same chip is switched off. AV input: the kernel's
+# adv7180 is switched off for kray_adv7180 (userpatches/camera), which adds
+# what the Rockchip D-PHY and ISP need for the ADV7282-M.
 function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281,ak7375=y;imx378,imx258,imx335,imx415,imx290,dw9807,tc358743=n")
+	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281,ak7375=y;imx378,imx258,imx335,imx415,imx290,dw9807,tc358743,adv7180=n")
 	[[ -f .config ]] || return 0
 	opts_y+=("VIDEO_IMX708" "VIDEO_IMX327" "VIDEO_OV9281" "VIDEO_AK7375")
 	opts_n+=("VIDEO_IMX378" "VIDEO_IMX258" "VIDEO_IMX335" "VIDEO_IMX415" "VIDEO_IMX290"
-		"VIDEO_DW9807_VCM" "VIDEO_TC358743")
+		"VIDEO_DW9807_VCM" "VIDEO_TC358743" "VIDEO_ADV7180")
 }
 
 # Camera helpers for the vendor image:
@@ -356,7 +358,7 @@ function post_customize_image__kray_som_rkc_demo() {
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
-		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
+		sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays=/s/$/ kray-som-rkc-imx219/' \
 			"${SDCARD}/boot/armbianEnv.txt"
 	else
 		echo "overlays=kray-som-rkc-imx219" >> "${SDCARD}/boot/armbianEnv.txt"

@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: analogue video input (CVBS, PAL/NTSC) through an Analog
+ * Devices ADV7282-M decoder module for the Raspberry Pi CSI connector.
+ * Vendor kernel only.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-adv7282m
+ *
+ * kray_adv7180 driver (built in, userpatches/camera/kray_adv7180). Decoder
+ * on I2C1 at 0x21 (its CSI-2 and VPP register maps at 0x44 and 0x42), its
+ * own 28.63636 MHz crystal, one MIPI CSI-2 lane (432 Mbit/s with the
+ * built-in deinterlacer, I2P) through csi2_dphy0 into rkisp (rkisp_vir0),
+ * UYVY 720x576 (PAL) or 720x480 (NTSC) progressive. Camera power-down
+ * (GPIO2_C0) and reset (GPIO2_C1) are held high, as for the camera overlays.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/ {
+	compatible = "kray,som-rkc", "rockchip,rk3566";
+
+	fragment@1 {
+		target = <&gpio2>;
+		__overlay__ {
+			kray-camera-enable-hog {
+				gpio-hog;
+				/* GPIO2_C0: power-down (PDN), GPIO2_C1: reset */
+				gpios = <RK_PC0 GPIO_ACTIVE_HIGH>, <RK_PC1 GPIO_ACTIVE_HIGH>;
+				output-high;
+				line-name = "camera-pdn", "camera-reset";
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&i2c1>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			adv7282m: adv7282m@21 {
+				compatible = "adi,adv7282-m";
+				reg = <0x21>;
+
+				port {
+					adv7282m_out: endpoint {
+						remote-endpoint = <&dphy0_in_adv7282m>;
+						data-lanes = <1>;
+						link-frequencies = /bits/ 64 <216000000>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&csi2_dphy_hw>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@4 {
+		target = <&csi2_dphy0>;
+		__overlay__ {
+			status = "okay";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_in_adv7282m: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&adv7282m_out>;
+						data-lanes = <1>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dphy0_out: endpoint@1 {
+						reg = <1>;
+						remote-endpoint = <&isp0_in>;
+					};
+				};
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&rkisp>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@6 {
+		target = <&rkisp_mmu>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	fragment@7 {
+		target = <&rkisp_vir0>;
+		__overlay__ {
+			status = "okay";
+
+			port {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				isp0_in: endpoint@0 {
+					reg = <0>;
+					remote-endpoint = <&dphy0_out>;
+				};
+			};
+		};
+	};
+};

@@ -68,10 +68,10 @@ Vendor image only: the RK3566 camera path (CSI-2 D-PHY → ISP v2.1) has no main
 
 | Part | Where |
 |---|---|
-| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647,imx296,imx327,ov9281,ov7251,imx378,imx519,arducam-64mp,imx283,imx258,imx335,imx415,imx290,ov2311,mira220,tc358743,tc358743-4lane}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
+| Overlays | `/boot/dtb/rockchip/overlay/kray-som-rkc-{imx219,imx477,imx708,ov5647,imx296,imx327,ov9281,ov7251,imx378,imx519,arducam-64mp,imx283,imx258,imx335,imx415,imx290,ov2311,mira220,tc358743,tc358743-4lane,adv7282m}.dtbo` (sources in `userpatches/overlay/rk35xx-vendor-6.1/`) |
 | Sensor bus | I2C1, 2 CSI-2 lanes on `csi2_dphy0` (1 for the IMX296 and OV7251, 4 for the IMX283 and `tc358743-4lane`) |
 | Camera power | GPIO2_C0 (power-down) and GPIO2_C1 (reset) held high by the overlay |
-| Kernel | `imx219`, `imx477` (also IMX378), `imx708`, `ov5647`, `imx296`, `imx327`, `ov9281`, `ov7251`, `imx519`, `arducam_64mp`, `imx283`, `rpi_imx258`, `rpi_imx335`, `rpi_imx415`, `rpi_imx290`, `rpi_ov2311`, `rpi_mira220` drivers, the `rpi_dw9807_vcm` and `ak7375` lens drivers, Rockchip's `tc35874x` HDMI-to-CSI bridge driver, CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
+| Kernel | `imx219`, `imx477` (also IMX378), `imx708`, `ov5647`, `imx296`, `imx327`, `ov9281`, `ov7251`, `imx519`, `arducam_64mp`, `imx283`, `rpi_imx258`, `rpi_imx335`, `rpi_imx415`, `rpi_imx290`, `rpi_ov2311`, `rpi_mira220` drivers, the `rpi_dw9807_vcm` and `ak7375` lens drivers, Rockchip's `tc35874x` HDMI-to-CSI bridge driver, `kray_adv7180` (ADV7282-M AV input), CSI-2 D-PHY, `rkisp` (ISP v2.1), all built in |
 | Tools | `v4l-utils` (`v4l2-ctl`, `media-ctl`), GStreamer `v4l2src` |
 
 ## Enable
@@ -89,7 +89,7 @@ The commands below remove any camera overlay that is already on the line, keep o
 ### Raspberry Pi Camera v2 (IMX219)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx219/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx219' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -97,7 +97,7 @@ sudo reboot
 ### Raspberry Pi HQ Camera (IMX477)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx477/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx477' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -105,7 +105,7 @@ sudo reboot
 ### Raspberry Pi Camera Module 3 (IMX708)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx708/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx708' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -113,7 +113,7 @@ sudo reboot
 ### Raspberry Pi Camera Module 1 (OV5647)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-ov5647/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-ov5647' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -121,7 +121,7 @@ sudo reboot
 ### Raspberry Pi Global Shutter Camera (IMX296)
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx296/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx296' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -131,7 +131,7 @@ sudo reboot
 The same two commands with the module's overlay name (`kray-som-rkc-imx327`, `-ov9281`, `-ov7251`, `-imx378`, `-imx519`, `-arducam-64mp`, `-imx283`, `-imx258`, `-imx335`, `-imx415`, `-imx290`, `-ov2311` or `-mira220`), e.g. for an IMX462 starlight module:
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-imx327/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-imx327' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -143,7 +143,7 @@ Power off, swap the module, boot, run the commands for the new camera and reboot
 ### Disable
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 sudo reboot
 ```
 
@@ -157,7 +157,7 @@ sudo reboot
 
 ```bash
 dmesg | grep -iE 'imx|ov[0-9]|rkisp|csi2'
-i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708, IMX296, IMX327, IMX378, IMX519, Arducam 64 MP, IMX283, IMX335, IMX290) or 36 (OV5647), 60 (OV9281, OV7251, OV2311), 10 (IMX258), 37 (IMX415), 54 (Mira220), 0c (lens motor of Camera Module 3 / Arducam 16 and 64 MP), 0f (TC358743); "UU" once the driver has it
+i2cdetect -y 1                   # 10 (IMX219), 1a (IMX477, IMX708, IMX296, IMX327, IMX378, IMX519, Arducam 64 MP, IMX283, IMX335, IMX290) or 36 (OV5647), 60 (OV9281, OV7251, OV2311), 10 (IMX258), 37 (IMX415), 54 (Mira220), 0c (lens motor of Camera Module 3 / Arducam 16 and 64 MP), 0f (TC358743), 21 (ADV7282-M); "UU" once the driver has it
 v4l2-ctl --list-devices          # rkisp_mainpath, rkisp_selfpath, ...
 media-ctl -d /dev/media0 -p      # sensor -> csi2-dphy0 -> rkisp-isp-subdev -> rkisp_mainpath
 ```
@@ -262,7 +262,7 @@ Raspberry Pi style HDMI-to-CSI-2 boards with a Toshiba TC358743 (Geekworm C790, 
 | `kray-som-rkc-tc358743-4lane` | 22-pin, 4 lanes (e.g. C779) | 4 at 594 Mbit/s | 1080p60 |
 
 ```bash
-sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
 grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-tc358743/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-tc358743' | sudo tee -a /boot/armbianEnv.txt
 sudo reboot
 ```
@@ -280,12 +280,35 @@ v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=NV12 
 
 Audio over HDMI (the bridge's I2S output) is not connected.
 
+## AV input (ADV7282-M)
+
+Analogue video (CVBS: PAL, NTSC or SECAM from an analogue camera, a reversing camera, a VCR) through an Analog Devices ADV7282-M decoder module for the Raspberry Pi CSI connector (I2C address `0x21`, one CSI-2 lane, its own 28.63636 MHz crystal).
+
+```bash
+sudo sed -i -e '/^overlays=/s/ *kray-som-rkc-\(imx[0-9]*\|ov[0-9]*\|arducam-[0-9a-z]*\|mira[0-9]*\|tc358743[-0-9a-z]*\|adv[0-9a-z]*\)//g' -e '/^overlays= *$/d' /boot/armbianEnv.txt
+grep -q '^overlays=' /boot/armbianEnv.txt && sudo sed -i '/^overlays=/s/$/ kray-som-rkc-adv7282m/' /boot/armbianEnv.txt || echo 'overlays=kray-som-rkc-adv7282m' | sudo tee -a /boot/armbianEnv.txt
+sudo reboot
+```
+
+The driver, `kray_adv7180`, is the kernel's adv7180 with a link frequency control for the Rockchip CSI-2 D-PHY. It starts the ADV7282-M in progressive mode: the chip's own deinterlacer (I2P) turns the 50/60 fields per second into 25/30 full frames, because the Rockchip ISP cannot assemble alternating fields. The decoder delivers UYVY 720x576 (PAL) or 720x480 (NTSC); the ISP passes it through to NV12.
+
+```bash
+SD=$(for s in /dev/v4l-subdev*; do grep -qs adv7180 /sys/class/video4linux/${s##*/}/name && echo $s; done)
+v4l2-ctl -d $SD --get-detected-standard        # PAL / NTSC of the connected source
+v4l2-ctl -d $SD --set-standard=pal             # or ntsc; set before capturing
+v4l2-ctl -d /dev/video0 --set-fmt-video=width=720,height=576,pixelformat=NV12 \
+  --stream-mmap=3 --stream-skip=10 --stream-count=1 --stream-to=/tmp/av.nv12
+```
+
+The analogue input to use (the module's CVBS connector is usually AIN1) and brightness, contrast, saturation and hue are controls on the same sub-device (`v4l2-ctl -d $SD -l`). The `kray-cam-3a` service leaves the decoder alone (it has no exposure control).
+
 ## Status
 
 - **IMX477 (Raspberry Pi HQ Camera v1.0)**: tested on Kray-SoM-RKC. The sensor is found on I2C1 (`Device found is imx477`), linked `imx477 1-001a` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, the D-PHY runs at 900 Mbit/s per lane, and `rkisp_mainpath` streams NV12 at the rates above.
 - **IMX708 (Camera Module 3) and OV5647 (Camera Module 1)**: overlays and drivers build; not yet tested with a module.
 - **IMX296 (Global Shutter Camera)**: ported driver and overlay build; not yet tested with a module.
 - **Third-party modules (IMX327/IMX462, OV9281, OV7251, IMX378, IMX519, Arducam 64 MP, IMX283, IMX258, IMX335, IMX415, IMX290, OV2311, Mira220)**: overlays and drivers build; not yet tested with a module. Third-party modules differ in pinout, power and oscillator, so check the module's data first.
+- **AV input (ADV7282-M)**: driver and overlay build; not yet tested with a module.
 - **Lens focus (Camera Module 3, Arducam 16 and 64 MP) and HDMI input (TC358743)**: drivers, overlays and the EDID service build; not yet tested with hardware.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above.
 
