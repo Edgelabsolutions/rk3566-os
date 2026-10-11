@@ -1,0 +1,11 @@
+config VIDEO_KRAY_ADV7180
+	tristate "ADV7180/ADV7282-M video decoder support (Kray-SoM-RKC)"
+	depends on GPIOLIB && VIDEO_DEV && I2C
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  The kernel's adv7180 driver with the link frequency control and the
+	  progressive default the Rockchip CSI-2 D-PHY and ISP need, for the
+	  ADV7282-M analogue video (CVBS) to MIPI CSI-2 decoder.
+
+	  The module is called kray_adv7180.
