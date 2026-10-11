@@ -436,12 +436,35 @@
 	bus-width = <4>;
 	cap-mmc-highspeed;
 	cap-sd-highspeed;
+	sd-uhs-sdr104;
 	disable-wp;
 	vmmc-supply = <&vcc3v3_sd>;
 	vqmmc-supply = <&vccio_sd>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
 	status = "okay";
+};
+
+/*
+ * microSD in UHS-I SDR104 (150 MHz, 1.8 V signalling): with the SoC's
+ * default drive strength (level 2) tuning finds no working sample phase
+ * ("All phases bad"); level 5 tunes reliably (level 3 tunes, but the card
+ * initialisation saw a CRC error once).
+ */
+&sdmmc0_bus4 {
+	rockchip,pins =
+		<1 RK_PD5 1 &pcfg_pull_up_drv_level_5>,
+		<1 RK_PD6 1 &pcfg_pull_up_drv_level_5>,
+		<1 RK_PD7 1 &pcfg_pull_up_drv_level_5>,
+		<2 RK_PA0 1 &pcfg_pull_up_drv_level_5>;
+};
+
+&sdmmc0_clk {
+	rockchip,pins = <2 RK_PA2 1 &pcfg_pull_up_drv_level_5>;
+};
+
+&sdmmc0_cmd {
+	rockchip,pins = <2 RK_PA1 1 &pcfg_pull_up_drv_level_5>;
 };
 
 /* USB OTG/USB Host_1 USB 2.0 Comb */

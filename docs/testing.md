@@ -74,7 +74,7 @@ Anything else is worth a closer look.
 - **HDMI**: picture on the monitor, console login works with a USB keyboard.
 - **UART**: kernel log and login on the serial console; the initramfs shell accepts input (boot with a wrong `rootdev` to reach it, only when the console or initramfs changed).
 - **WiFi**: `nmcli dev wifi connect "<SSID>" password "<password>"`, then `ping -I wlx… 1.1.1.1`.
-- **Reboot**: `sudo reboot` three times; the SD card initialises at 50 MHz every time, no tuning errors (`dmesg | grep -i mmc`).
+- **Reboot**: `sudo reboot` three times; a UHS-I card initialises in SDR104 every time (`new ultra high speed SDR104 SDXC card`), with no tuning or CRC errors (`dmesg | grep -i mmc`); `cat /sys/kernel/debug/mmc1/ios` shows 150000000 Hz and 1.80 V (mount debugfs first).
 - **Upgrade**: `sudo apt update && sudo apt upgrade -y && sudo reboot`; the board boots the same kernel (`uname -r`), `apt-mark showhold` still lists the kernel and DTB.
 - **Hailo-8** (when present), see [hailo.md](hailo.md): `hailortcli benchmark resnet_v1_18.hef`.
 - **NPU details** (when the NPU or its runtime changed), see [vendor-npu-and-codecs.md](vendor-npu-and-codecs.md): set the `performance` governor and compare the average time too.
