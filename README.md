@@ -73,6 +73,8 @@ The image lands in `armbian-build/output/images/`. Extra Armbian options are pas
 
 The RKNN SDK files are distributed under the Rockchip license, so they are not stored in this repository and are downloaded at build time.
 
+**Proprietary components.** The Rockchip RKNN runtime and the Hailo-8 firmware may not be redistributed in public images, so by default the image leaves them out. On the board, `sudo kray-get-proprietary` downloads them from their official sources (pinned by SHA-256), shows the license and installs them after you accept it; `--from DIR` installs from a local copy on a board without internet. `./build.sh KRAY_PROPRIETARY=yes` puts them into the image instead, for internal and customer images; the demo image always contains them.
+
 ## Flashing and first boot
 
 ```bash
@@ -85,8 +87,9 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ```
   The initial password is `1234` and is already expired: the first login asks for it once more and then for a new password, and closes the session; log in again with the new one. The hostname is published over mDNS (avahi); with several boards on one network the next ones become `kray-som-rkc-2.local` and so on. The console login prompt also shows the board's IP. No regular user is created; add one with `adduser` if needed.
 - Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
-- NPU check (vendor images only):
+- NPU (vendor images only): install the RKNN runtime once, then run the check:
   ```bash
+  sudo kray-get-proprietary rknn
   sudo /usr/share/kray-som-rkc/npu-test/run.sh
   ```
   Expected: dog → class 156 (~0.93), cat → classes 278–286, ~4.5 ms/frame. Converting and running your own models: [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md#npu).

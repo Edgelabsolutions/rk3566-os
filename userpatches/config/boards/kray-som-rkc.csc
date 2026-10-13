@@ -59,18 +59,39 @@ function post_customize_image__kray_som_rkc_serial_console() {
 	sed -i -e 's/^console=.*/console=serial/' -e 's/^verbosity=.*/verbosity=1/' "${SDCARD}"/boot/armbianEnv.txt
 }
 
+# Proprietary components (Rockchip RKNN runtime, Hailo-8 firmware) may not be
+# redistributed in public images. By default the image leaves them out and
+# ships kray-get-proprietary, which downloads them on the board (pinned by
+# SHA-256, after the user accepts the license). KRAY_PROPRIETARY=yes puts them
+# into the image, for internal and customer images; the demo image always has
+# them, since it has to work offline.
+function kray_proprietary_in_image() {
+	[[ "${KRAY_PROPRIETARY:-no}" == "yes" || "${KRAY_DEMO:-no}" == "yes" ]]
+}
+
+function post_customize_image__kray_som_rkc_proprietary_tool() {
+	install -D -m 0755 "${USERPATCHES_PATH}/proprietary/kray-get-proprietary" "${SDCARD}/usr/sbin/kray-get-proprietary"
+}
+
 # RKNN runtime (librknnrt 2.3.2, matches the vendor kernel's rknpu 0.9.8) and a
 # MobileNet smoke test in /usr/share/kray-som-rkc/npu-test. Vendor only: mainline
-# has no driver for the RK3566 NPU.
+# has no driver for the RK3566 NPU. The test program is always installed; the
+# runtime, headers and test model only with kray_proprietary_in_image.
 function post_customize_image__kray_som_rkc_npu_runtime() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	display_alert "$BOARD" "Installing RKNN runtime 2.3.2 and NPU test" "info"
 	local src="${USERPATCHES_PATH}/npu"
+	install -d "${SDCARD}/usr/share/kray-som-rkc/npu-test/model"
+	install -m 0755 "${src}/npu-test/npu_test" "${src}/npu-test/run.sh" "${SDCARD}/usr/share/kray-som-rkc/npu-test/"
+	install -m 0644 "${src}/npu-test/npu_test.c" "${SDCARD}/usr/share/kray-som-rkc/npu-test/"
+	if ! kray_proprietary_in_image; then
+		display_alert "$BOARD" "RKNN runtime left out (installed on the board with kray-get-proprietary)" "info"
+		return 0
+	fi
+	display_alert "$BOARD" "Installing RKNN runtime 2.3.2 and NPU test model" "info"
 	install -D -m 0644 "${src}/librknnrt.so" "${SDCARD}/usr/lib/librknnrt.so"
 	install -d "${SDCARD}/usr/include"
 	install -m 0644 "${src}"/include/*.h "${SDCARD}/usr/include/"
-	install -d "${SDCARD}/usr/share/kray-som-rkc"
-	cp -r "${src}/npu-test" "${SDCARD}/usr/share/kray-som-rkc/"
+	install -m 0644 "${src}"/npu-test/model/* "${SDCARD}/usr/share/kray-som-rkc/npu-test/model/"
 	chroot_sdcard ldconfig
 }
 
@@ -266,13 +287,17 @@ function post_customize_image__kray_som_rkc_camera_tools() {
 	chroot_sdcard systemctl enable kray-hdmi-in-edid.service
 }
 
-# Firmware (redistributed in binary form with Hailo's EULA), device node
+# Firmware (only with kray_proprietary_in_image; Hailo's EULA), device node
 # permissions, module options and the HailoRT runtime (libhailort, hailortcli).
 function post_customize_image__kray_som_rkc_hailo() {
 	local src="${USERPATCHES_PATH}/hailo"
 	display_alert "$BOARD" "Installing Hailo-8 firmware and HailoRT" "info"
-	install -D -m 0644 "${src}/firmware/hailo8_fw.bin" "${SDCARD}/lib/firmware/hailo/hailo8_fw.bin"
-	install -D -m 0644 "${src}/firmware/EULA" "${SDCARD}/lib/firmware/hailo/EULA"
+	if kray_proprietary_in_image; then
+		install -D -m 0644 "${src}/firmware/hailo8_fw.bin" "${SDCARD}/lib/firmware/hailo/hailo8_fw.bin"
+		install -D -m 0644 "${src}/firmware/EULA" "${SDCARD}/lib/firmware/hailo/EULA"
+	else
+		display_alert "$BOARD" "Hailo-8 firmware left out (installed on the board with kray-get-proprietary)" "info"
+	fi
 	install -D -m 0644 "${src}/driver/51-hailo-udev.rules" "${SDCARD}/etc/udev/rules.d/51-hailo-udev.rules"
 	install -D -m 0644 "${src}/driver/hailo_pci.conf" "${SDCARD}/etc/modprobe.d/hailo_pci.conf"
 	if ! compgen -G "${src}/*.deb" > /dev/null; then

@@ -98,8 +98,11 @@ if modprobe hailo_pci 2>/dev/null && lsmod | grep -q '^hailo_pci'; then
 else
 	result FAIL "hailo driver" "modprobe hailo_pci failed"
 fi
-[[ -f /lib/firmware/hailo/hailo8_fw.bin ]] && result PASS "hailo firmware" "/lib/firmware/hailo/hailo8_fw.bin" \
-	|| result FAIL "hailo firmware" "missing"
+if [[ -f /lib/firmware/hailo/hailo8_fw.bin ]]; then
+	result PASS "hailo firmware" "/lib/firmware/hailo/hailo8_fw.bin"
+else
+	result SKIP "hailo firmware" "not installed (sudo kray-get-proprietary hailo)"
+fi
 if have hailortcli; then
 	ver="$(cd "${WORK}" && hailortcli --version 2>&1 | head -1)"
 	result PASS "hailort" "${ver}"
@@ -120,6 +123,8 @@ if [[ "${BRANCH}" != vendor ]]; then
 	result SKIP "npu" "vendor kernel only"
 elif [[ ${QUICK} -eq 1 ]]; then
 	result SKIP "npu" "--quick"
+elif [[ ! -f /usr/lib/librknnrt.so ]]; then
+	result SKIP "npu" "RKNN runtime not installed (sudo kray-get-proprietary rknn)"
 else
 	out="$(/usr/share/kray-som-rkc/npu-test/run.sh 2>&1)"
 	echo "${out}" | grep -E 'RKNPU driver|rknn_run'

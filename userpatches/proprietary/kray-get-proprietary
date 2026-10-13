@@ -1,0 +1,148 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# Kray-SoM-RKC: install the proprietary components that public images leave
+# out because their licenses do not allow us to redistribute them:
+#
+#   rknn   Rockchip RKNN runtime 2.3.2 (librknnrt.so, C headers) and the
+#          MobileNet test model, from airockchip/rknn-toolkit2 v2.3.2;
+#          needed for the NPU (vendor kernel).
+#   hailo  Hailo-8 firmware 4.24.0, from Hailo's download server; needed for
+#          a Hailo-8 module on the M.2 slot.
+#
+# Every file is pinned by SHA-256. The license is shown before installing and
+# has to be accepted (or pass --accept-licenses).
+#
+#   sudo kray-get-proprietary                 # what this board needs
+#   sudo kray-get-proprietary rknn hailo      # both
+#   sudo kray-get-proprietary --from /media/usb/blobs rknn   # offline copy
+#   kray-get-proprietary --status
+set -euo pipefail
+
+RKNN_BASE="https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v2.3.2"
+HAILO_FW_URL="https://hailo-hailort.s3.eu-west-2.amazonaws.com/Hailo8/4.24.0/FW/hailo8_fw.4.24.0.bin"
+HAILO_EULA_URL="https://raw.githubusercontent.com/hailo-ai/hailort/63adffec12da88f1e7cfdc07f2e07681671e83e8/hailort/hailo_firmware_eula"
+NPU_TEST=/usr/share/kray-som-rkc/npu-test
+
+# name|sha256|source URL|install path|mode (read through namerefs)
+# shellcheck disable=SC2034
+RKNN_FILES=(
+	"LICENSE|d846f57d942c7dfdca7b8b54f9e8bb39e1e226790dc4f5ee205d6fd678961720|${RKNN_BASE}/LICENSE|/usr/share/doc/librknnrt/LICENSE|0644"
+	"librknnrt.so|d31fc19c85b85f6091b2bd0f6af9d962d5264a4e410bfb536402ec92bac738e8|${RKNN_BASE}/rknpu2/runtime/Linux/librknn_api/aarch64/librknnrt.so|/usr/lib/librknnrt.so|0644"
+	"rknn_api.h|c48e11a6f41b451a5fd1e4ad774ea60252d3d94f78bee9b21ea3d21b21deba9a|${RKNN_BASE}/rknpu2/runtime/Linux/librknn_api/include/rknn_api.h|/usr/include/rknn_api.h|0644"
+	"rknn_custom_op.h|af5983da0ca244ca31dc3162aa683322b0285531196c7a770f29cd2e3b8ccaa6|${RKNN_BASE}/rknpu2/runtime/Linux/librknn_api/include/rknn_custom_op.h|/usr/include/rknn_custom_op.h|0644"
+	"rknn_matmul_api.h|aaadd9a7118de30a06b222996b6731db77095d00f5931a7a98c83a67f14a4d42|${RKNN_BASE}/rknpu2/runtime/Linux/librknn_api/include/rknn_matmul_api.h|/usr/include/rknn_matmul_api.h|0644"
+	"mobilenet_v1.rknn|92b36515616fc568ddc573f07a345cf28441efe0d24ecc9b98051fe8bcfad980|${RKNN_BASE}/rknpu2/examples/rknn_mobilenet_demo/model/RK3566_RK3568/mobilenet_v1.rknn|${NPU_TEST}/model/mobilenet_v1.rknn|0644"
+	"cat_224x224.jpg|0ce3ef6da3424c0744385935a210e4ec8ab3a6ddda205113ab07b77f9c0e812a|${RKNN_BASE}/rknpu2/examples/rknn_mobilenet_demo/model/cat_224x224.jpg|${NPU_TEST}/model/cat_224x224.jpg|0644"
+	"dog_224x224.jpg|c350299c6283d5f62fecf1f845b6b3be9aafec8dff528ca09a129990f0a584b0|${RKNN_BASE}/rknpu2/examples/rknn_mobilenet_demo/model/dog_224x224.jpg|${NPU_TEST}/model/dog_224x224.jpg|0644"
+)
+# shellcheck disable=SC2034
+HAILO_FILES=(
+	"EULA|b9a1cb4c746e8fb12ed40dea4227ee8793c2102ad536be55a84139d4984c8ab8|${HAILO_EULA_URL}|/lib/firmware/hailo/EULA|0644"
+	"hailo8_fw.bin|3ebeb209987bb0e484353be23774d3893908de84069016c4e37361c871d8433a|${HAILO_FW_URL}|/lib/firmware/hailo/hailo8_fw.bin|0644"
+)
+
+ACCEPT=no
+FROM=""
+STATUS=no
+WANT=()
+
+usage() {
+	sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'
+	exit "${1:-0}"
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--accept-licenses) ACCEPT=yes ;;
+		--from) FROM="${2:?--from needs a directory}"; shift ;;
+		--status) STATUS=yes ;;
+		-h|--help) usage 0 ;;
+		rknn|hailo) WANT+=("$1") ;;
+		*) echo "Unknown argument: $1" >&2; usage 2 ;;
+	esac
+	shift
+done
+
+installed() { # component -> 0 if every file is in place with the right hash
+	local -n list="$1" ; local e name sum url dst mode
+	for e in "${list[@]}"; do
+		IFS='|' read -r name sum url dst mode <<< "$e"
+		[[ -f "$dst" ]] && echo "${sum}  ${dst}" | sha256sum -c --status 2>/dev/null || return 1
+	done
+}
+
+if [[ "$STATUS" == yes ]]; then
+	installed RKNN_FILES && echo "rknn:  installed" || echo "rknn:  not installed"
+	installed HAILO_FILES && echo "hailo: installed" || echo "hailo: not installed"
+	exit 0
+fi
+
+[[ $EUID -eq 0 ]] || { echo "Run as root: sudo $0 $*" >&2; exit 1; }
+
+if [[ ${#WANT[@]} -eq 0 ]]; then
+	# What this board can use: the NPU needs the vendor kernel's rknpu driver;
+	# Hailo firmware only matters with the Hailo driver present.
+	[[ -e /sys/module/rknpu || "$(uname -r)" == *vendor* ]] && WANT+=(rknn)
+	modinfo hailo_pci > /dev/null 2>&1 && WANT+=(hailo)
+	[[ ${#WANT[@]} -gt 0 ]] || { echo "Nothing to install for this kernel ($(uname -r))."; exit 0; }
+fi
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+fetch() { # name sum url -> $TMP/name, verified
+	local name="$1" sum="$2" url="$3" out="$TMP/$1"
+	if [[ -n "$FROM" ]]; then
+		[[ -f "$FROM/$name" ]] || { echo "Missing $FROM/$name" >&2; return 1; }
+		cp "$FROM/$name" "$out"
+	else
+		curl -fsSL --retry 3 -o "$out" "$url" || { echo "Download failed: $url" >&2; return 1; }
+	fi
+	echo "${sum}  ${out}" | sha256sum -c --status || { echo "Checksum mismatch: $name" >&2; return 1; }
+}
+
+confirm() { # component license-file
+	echo
+	echo "=== $1: license ==="
+	cat "$2"
+	echo "=== end of license ==="
+	[[ "$ACCEPT" == yes ]] && { echo "Accepted (--accept-licenses)."; return 0; }
+	[[ -t 0 ]] || { echo "No terminal to ask; rerun with --accept-licenses to accept." >&2; return 1; }
+	local a
+	read -r -p "Accept the $1 license and install? [y/N] " a
+	[[ "$a" == [yYтТ]* ]]
+}
+
+install_component() { # component array-name
+	local comp="$1"; local -n list="$2"; local e name sum url dst mode first=""
+	if installed "$2"; then echo "$comp: already installed"; return 0; fi
+	for e in "${list[@]}"; do
+		IFS='|' read -r name sum url dst mode <<< "$e"
+		fetch "$name" "$sum" "$url" || return 1
+		[[ -n "$first" ]] || first="$TMP/$name"
+	done
+	confirm "$comp" "$first" || { echo "$comp: not installed."; return 1; }
+	for e in "${list[@]}"; do
+		IFS='|' read -r name sum url dst mode <<< "$e"
+		install -D -m "$mode" "$TMP/$name" "$dst"
+	done
+	echo "$comp: installed"
+}
+
+rc=0
+for c in "${WANT[@]}"; do
+	case "$c" in
+		rknn)
+			install_component rknn RKNN_FILES && ldconfig || rc=1 ;;
+		hailo)
+			if install_component hailo HAILO_FILES; then
+				# The driver loads the firmware when it probes the device.
+				if lsmod | grep -q '^hailo_pci'; then
+					modprobe -r hailo_pci && modprobe hailo_pci || true
+				fi
+			else
+				rc=1
+			fi ;;
+	esac
+done
+exit "$rc"
