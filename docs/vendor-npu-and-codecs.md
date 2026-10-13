@@ -17,13 +17,13 @@ This guide covers the **vendor** image (Rockchip BSP kernel 6.1). The NPU and th
 
 ## NPU
 
-The RK3566 NPU delivers about 0.8 TOPS on INT8. It runs models in Rockchip's `.rknn` format through the RKNN runtime, which the image ships preinstalled:
+The RK3566 NPU delivers about 0.8 TOPS on INT8. It runs models in Rockchip's `.rknn` format through the RKNN runtime. The runtime is under Rockchip's license and is not in public images; install it once with `sudo kray-get-proprietary rknn` (downloads it from airockchip/rknn-toolkit2 v2.3.2, SHA-256 checked, after you accept the license). Images built with `KRAY_PROPRIETARY=yes` and the demo image already contain it.
 
 | Item | Location |
 |---|---|
 | Kernel driver | `rknpu` 0.9.8 (built into the vendor kernel) |
-| Runtime library | `/usr/lib/librknnrt.so` (RKNN runtime 2.3.2) |
-| C headers | `/usr/include/rknn_api.h`, `rknn_matmul_api.h`, `rknn_custom_op.h` |
+| Runtime library | `/usr/lib/librknnrt.so` (RKNN runtime 2.3.2), from `kray-get-proprietary rknn` |
+| C headers | `/usr/include/rknn_api.h`, `rknn_matmul_api.h`, `rknn_custom_op.h`, from `kray-get-proprietary rknn` |
 | Smoke test | `/usr/share/kray-som-rkc/npu-test/` (source in `npu_test.c`) |
 
 Models must be converted for the NPU on a PC with the same toolkit version (2.3.2) as the runtime on the board.

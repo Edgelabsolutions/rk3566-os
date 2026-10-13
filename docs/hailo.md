@@ -1,11 +1,17 @@
 # Hailo-8 AI accelerator
 
-Kray-SoM-RKC has a PCIe 2.0 x1 M.2 slot (see the README). Both images (vendor and current) ship everything needed to run a Hailo-8, Hailo-8L or Hailo-8R module in it.
+Kray-SoM-RKC has a PCIe 2.0 x1 M.2 slot (see the README). Both images (vendor and current) ship the driver and HailoRT for a Hailo-8, Hailo-8L or Hailo-8R module in it. The firmware is under Hailo's EULA and is not in public images: install it once with
+
+```bash
+sudo kray-get-proprietary hailo     # downloads hailo8_fw 4.24.0 (SHA-256 checked), shows the EULA, reloads the driver
+```
+
+Images built with `KRAY_PROPRIETARY=yes` already contain it.
 
 | Component | Where | Version |
 |---|---|---|
 | `hailo_pci` kernel module | built with the kernel from [hailo-ai/hailort-drivers](https://github.com/hailo-ai/hailort-drivers) (GPL-2.0) | 4.24.0 |
-| Firmware | `/lib/firmware/hailo/hailo8_fw.bin`, with Hailo's license in `/lib/firmware/hailo/EULA` | 4.24.0 |
+| Firmware | `/lib/firmware/hailo/hailo8_fw.bin`, with Hailo's license in `/lib/firmware/hailo/EULA`; installed by `kray-get-proprietary hailo` | 4.24.0 |
 | HailoRT runtime | package `hailort`: `libhailort.so`, headers in `/usr/include/hailo`, `hailortcli` | 4.24.0 |
 | Device permissions | `/etc/udev/rules.d/51-hailo-udev.rules` (`/dev/hailo*` mode 0666) | |
 | Module options | `/etc/modprobe.d/hailo_pci.conf` (all commented out by default) | |
