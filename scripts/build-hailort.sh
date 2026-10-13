@@ -66,7 +66,7 @@ cat > "${STAGE}/DEBIAN/control" <<-EOF
 	Package: hailort
 	Version: ${PKG_VERSION}
 	Architecture: arm64
-	Maintainer: Kray-SoM-RKC OS <tishenko.alexandr@gmail.com>
+	Maintainer: Kray-SoM-RKC OS <o.tyshchenko@eslua.com>
 	Depends: libc6, libgcc-s1, libstdc++6
 	Section: libs
 	Priority: optional

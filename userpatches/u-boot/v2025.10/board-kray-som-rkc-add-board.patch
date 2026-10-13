@@ -1,5 +1,5 @@
 From 76bfc26340f06b98e246388fd1eba00d8bedafe2 Mon Sep 17 00:00:00 2001
-From: Alexandr Tishenko <tishenko.alexandr@gmail.com>
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
 Date: Mon, 28 Sep 2026 00:08:54 +0300
 Subject: [PATCH] board: rockchip: add Kray-SoM-RKC (RK3566)
 
