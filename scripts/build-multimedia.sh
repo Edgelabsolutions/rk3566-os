@@ -151,7 +151,7 @@ make_deb() { # package stagedir depends description
 		Package: ${pkg}
 		Version: ${PKG_VERSION}
 		Architecture: arm64
-		Maintainer: Kray-SoM-RKC OS <tishenko.alexandr@gmail.com>
+		Maintainer: Kray-SoM-RKC OS <o.tyshchenko@eslua.com>
 		Depends: ${deps}
 		Section: video
 		Priority: optional
