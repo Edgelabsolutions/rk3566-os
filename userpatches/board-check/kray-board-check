@@ -9,7 +9,7 @@
 # follows at the end. Save the output when reporting results:
 #   sudo kray-board-check 2>&1 | tee kray-board-check.log
 # Installed as /usr/bin/kray-board-check; see docs/testing.md in
-# kray-som-rkc-os for expected values.
+# rk3566-os for expected values.
 
 QUICK=0
 [[ "${1:-}" == "--quick" ]] && QUICK=1
