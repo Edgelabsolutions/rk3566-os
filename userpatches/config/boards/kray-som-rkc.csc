@@ -368,6 +368,30 @@ function post_customize_image__kray_som_rkc_network_first_login() {
 	ISSUE
 }
 
+# Image hardening (docs/security.md): stricter SSH settings (root keeps
+# password login for the first login), no rpcbind and no LLMNR, an nftables
+# firewall that only lets in SSH, mDNS, ICMP and DHCP replies, sysctl
+# defaults, and no world-writable CEC node.
+function post_family_config__kray_som_rkc_hardening_packages() {
+	add_packages_to_image nftables
+}
+
+function post_customize_image__kray_som_rkc_hardening() {
+	local src="${USERPATCHES_PATH}/hardening"
+	display_alert "$BOARD" "Hardening: SSH, rpcbind, LLMNR, firewall, sysctl" "info"
+	install -D -m 0644 "${src}/sshd-kray.conf" "${SDCARD}/etc/ssh/sshd_config.d/10-kray.conf"
+	install -D -m 0644 "${src}/resolved-kray.conf" "${SDCARD}/etc/systemd/resolved.conf.d/10-kray.conf"
+	install -D -m 0644 "${src}/sysctl-kray.conf" "${SDCARD}/etc/sysctl.d/90-kray.conf"
+	install -D -m 0644 "${src}/90-kray-rk-cec.rules" "${SDCARD}/etc/udev/rules.d/90-kray-rk-cec.rules"
+	install -D -m 0755 "${src}/nftables.conf" "${SDCARD}/etc/nftables.conf"
+	install -d -m 0755 "${SDCARD}/etc/nftables.d"
+	install -D -m 0644 "${src}/nftables-stop.conf" \
+		"${SDCARD}/etc/systemd/system/nftables.service.d/10-kray.conf"
+	chroot_sdcard systemctl enable nftables.service
+	# NFS clients keep NFSv4; NFSv3 needs: systemctl unmask --now rpcbind.socket rpcbind.service
+	chroot_sdcard systemctl mask rpcbind.service rpcbind.socket
+}
+
 # Exhibition demo image (KRAY_DEMO=yes, vendor only; see docs/demo.md): the
 # board boots straight into kray-demo (IMX219 camera on HDMI, people detection
 # on the NPU, CPU/NPU load). After the first boot has resized the file system,
@@ -406,6 +430,7 @@ function post_customize_image__kray_som_rkc_demo() {
 		"${SDCARD}/usr/lib/systemd/system/kray-demo-stream.service"
 	install -D -m 0644 "${src}/files/www/index.html" "${SDCARD}/usr/share/kray-demo/www/index.html"
 	chroot_sdcard systemctl enable kray-demo.service kray-demo-lockdown.service kray-demo-stream.service
+	install -D -m 0644 "${USERPATCHES_PATH}/hardening/demo-stream.nft" "${SDCARD}/etc/nftables.d/kray-demo-stream.nft"
 
 	# Camera overlay on from the first boot.
 	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then

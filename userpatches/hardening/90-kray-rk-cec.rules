@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: MIT
+# Kray-SoM-RKC: the Rockchip CEC node is world-writable by default.
+KERNEL=="rk_cec", MODE="0660", GROUP="video"
