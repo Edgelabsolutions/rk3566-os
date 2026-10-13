@@ -21,7 +21,7 @@ the LICENSES/ directory.
    - Everything else (build scripts, Armbian board configuration, tools,
      services, the demo, documentation) is under the MIT license:
 
-       Copyright (c) 2026 Kray-SoM-RKC OS contributors
+       Copyright (c) 2026 EdgeSolutions Lab
 
        Permission is hereby granted, free of charge, to any person obtaining
        a copy of this software and associated documentation files (the
