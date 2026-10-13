@@ -1,0 +1,53 @@
+Kray-SoM-RKC OS (rk3566-os) - licensing
+=======================================
+
+This repository holds build configuration, patches, drivers, tools and
+documentation for an Armbian-based OS for the Kray-SoM-RKC (Rockchip RK3566).
+Different parts are under different licenses. The full license texts are in
+the LICENSES/ directory.
+
+1. Files with an SPDX-License-Identifier header are under the license named
+   in that header (for example GPL-2.0, GPL-2.0-only, MIT,
+   (GPL-2.0+ OR MIT), Apache-2.0, or a Linux-syscall-note exception).
+
+2. Files without such a header:
+
+   - Linux kernel and U-Boot material is under GPL-2.0-only:
+       userpatches/kernel/
+       userpatches/u-boot/
+       userpatches/camera/*/Kconfig
+       userpatches/config/kernel/
+
+   - Everything else (build scripts, Armbian board configuration, tools,
+     services, the demo, documentation) is under the MIT license:
+
+       Copyright (c) 2026 EdgeSolutions Lab
+
+       Permission is hereby granted, free of charge, to any person obtaining
+       a copy of this software and associated documentation files (the
+       "Software"), to deal in the Software without restriction, including
+       without limitation the rights to use, copy, modify, merge, publish,
+       distribute, sublicense, and/or sell copies of the Software, and to
+       permit persons to whom the Software is furnished to do so, subject to
+       the following conditions:
+
+       The above copyright notice and this permission notice shall be
+       included in all copies or substantial portions of the Software.
+
+       THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+       EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+       MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+       IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+       CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+       TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+       SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+3. Third-party components are not stored in this repository. The build
+   downloads them, and they stay under their own licenses. Among them:
+   Armbian build framework (GPL-2.0), Linux kernel (GPL-2.0), U-Boot
+   (GPL-2.0+), Rockchip RKNN runtime and toolkit (Rockchip license),
+   Rockchip MPP/RGA (Apache-2.0), FFmpeg (LGPL-2.1+/GPL-2.0+), Hailo
+   HailoRT (MIT/GPL-2.0) and Hailo-8 firmware (Hailo EULA), YOLOv8n model
+   (AGPL-3.0, demo image only), stb (MIT/public domain). Images built from
+   this repository contain these components and their license terms apply
+   to them.

@@ -161,3 +161,7 @@ userpatches/
 - **Mainline WiFi.** Armbian's mainline config leaves `RTW88_8821AU` off; the board config enables it as a module for non-vendor branches.
 - **Device names differ between kernels:** the SD card is `mmcblk1` on vendor and `mmcblk0` on mainline; the onboard NIC is `end0` on both kernels. The root filesystem is mounted by UUID, so this does not affect booting.
 - **DTS sources:** `rk3566-lubancat-0.dts` / `rk3566-lubancat.dtsi` from [LubanCat/kernel](https://github.com/LubanCat/kernel) and upstream `rk3566-lubancat-1.dts`.
+
+## License
+
+Each file carries an SPDX license identifier where it has one; kernel and U-Boot material without one is GPL-2.0-only, and everything else without one is MIT. Third-party components downloaded by the build keep their own licenses. See [LICENSE](LICENSE) and [LICENSES/](LICENSES/).
