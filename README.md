@@ -86,6 +86,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ssh root@kray-som-rkc.local     # or ssh root@<IP from your router>
   ```
   The initial password is `1234` and is already expired: the first login asks for it once more and then for a new password, and closes the session; log in again with the new one. The hostname is published over mDNS (avahi); with several boards on one network the next ones become `kray-som-rkc-2.local` and so on. The console login prompt also shows the board's IP. No regular user is created; add one with `adduser` if needed.
+- **Security defaults.** A firewall lets in only SSH, mDNS, ping and DHCP replies (plus port 8080 on the demo image); rpcbind and LLMNR are off and SSH is tightened. To open a port, add a rule to `/etc/nftables.d/`. See [docs/security.md](docs/security.md).
 - Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
 - NPU (vendor images only): install the RKNN runtime once, then run the check:
   ```bash
@@ -137,7 +138,7 @@ scripts/fetch-hailo.sh                     Hailo-8 driver sources + firmware (4.
 scripts/build-hailort.sh                   HailoRT .deb (libhailort, hailortcli)
 scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
-docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, testing)
+docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
@@ -150,6 +151,7 @@ userpatches/
   camera/<driver>/                         camera drivers from Raspberry Pi's kernel, adapted for Rockchip
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
   demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
+  hardening/                               SSH, resolved, nftables, sysctl and udev defaults (docs/security.md)
 ```
 
 ## Technical notes
