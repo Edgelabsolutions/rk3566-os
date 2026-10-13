@@ -41,6 +41,9 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 }
 
 # Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
+# brought up to upstream stable 6.1.189 by
+# userpatches/kernel/rk35xx-vendor-6.1/9000-linux-stable-6.1.172-to-6.1.189.patch
+# (merge and conflict resolutions: docs/kernel-stable-6.1.189-merge.md),
 # as in Armbian main (armbian/build 81e8624). The matching kernel config is in
 # userpatches/config/kernel/linux-rk35xx-vendor.config. The Unisoc uwe5622 WiFi
 # driver that Armbian v26.5.1 injects does not link against rkr7.2 (the board
@@ -49,7 +52,10 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	display_alert "$BOARD" "Using vendor kernel branch rk-6.1-rkr7.2" "info"
 	declare -g KERNELBRANCH="branch:rk-6.1-rkr7.2"
-	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622)
+	# driver_rtw88 backports newer rtw88 code into 6.1; it no longer applies on
+	# top of the merged upstream stable releases (the patch below), and the
+	# vendor image uses the out-of-tree 88XXau driver for RTL8821AU instead.
+	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622 driver_rtw88)
 }
 
 # Serial-only console: kernel log, initramfs rescue shell and login on UART2
