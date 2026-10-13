@@ -255,6 +255,26 @@ function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 # tc358743 driver for the same chip is switched off. AV input: the kernel's
 # adv7180 is switched off for kray_adv7180 (userpatches/camera), which adds
 # what the Rockchip D-PHY and ISP need for the ADV7282-M.
+# Upstream 6.1.y (since the 6.1.189 merge) backported two API changes that
+# Armbian's out-of-tree Realtek Wi-Fi drivers only expect from later kernels,
+# by version number:
+# - struct usb_driver lost its drvwrap wrapper for a plain .driver member
+#   (8b7648962d41, a dependency of a use-after-free fix; mainline 6.8);
+# - cfg80211's tdls_mgmt gained a link_id argument (mainline 6.5).
+# Adapt the drivers to the backported API.
+function custom_kernel_config__kray_som_rkc_wifi_backport_compat() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	kernel_config_modifying_hashes+=("wifi-backport-compat=2")
+	[[ -f .config ]] || return 0
+	local f
+	for f in $(grep -rl 'drvwrap\.driver' drivers/net/wireless --include='*.c' 2>/dev/null); do
+		sed -i 's/drvwrap\.driver/driver/g' "$f"
+	done
+	for f in $(grep -rl 'int link_id,' drivers/net/wireless --include='*.c' 2>/dev/null); do
+		perl -0pi -e 's/#if \(LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 5, 0\)\)[^\n]*\n(\s*int link_id,)/#if 1 \/* tdls_mgmt link_id, backported to 6.1.y *\/\n$1/g' "$f"
+	done
+}
+
 function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281,ak7375=y;imx378,imx258,imx335,imx415,imx290,dw9807,tc358743,adv7180=n")
