@@ -115,6 +115,40 @@ function custom_kernel_config__kray_som_rkc_no_phy_led_trigger() {
 	opts_n+=("LED_TRIGGER_PHY")
 }
 
+# Kernel hardening (docs/security.md), for both kernels:
+# - memory-safety checks that cost little: usercopy bounds, FORTIFY_SOURCE,
+#   hardened and randomised slab free lists, zeroed allocations, KFENCE;
+# - Yama (ptrace limited to a process's own descendants) and Landlock;
+# - code the board does not need removed: cluster and rarely used file
+#   systems, ksmbd, NVMe/SCSI targets and legacy network protocols. These
+#   were among the areas with the most CVEs fixed in 6.1.173-6.1.189.
+# debugfs stays on: kray-demo reads the NPU load from it.
+function custom_kernel_config__kray_som_rkc_hardening() {
+	opts_y+=(
+		"HARDENED_USERCOPY" "FORTIFY_SOURCE"
+		"SLAB_FREELIST_HARDENED" "SLAB_FREELIST_RANDOM" "SHUFFLE_PAGE_ALLOCATOR"
+		"INIT_ON_ALLOC_DEFAULT_ON" "RANDOMIZE_KSTACK_OFFSET_DEFAULT"
+		"BUG_ON_DATA_CORRUPTION" "DEBUG_LIST" "SCHED_STACK_END_CHECK" "DEBUG_WX" "KFENCE"
+		"IO_STRICT_DEVMEM" "SECURITY_DMESG_RESTRICT" "SECURITY_YAMA" "SECURITY_LANDLOCK"
+	)
+	opts_n+=(
+		"SLAB_MERGE_DEFAULT"
+		"OCFS2_FS" "GFS2_FS" "DLM" "JFS_FS" "REISERFS_FS" "NILFS2_FS" "HFS_FS" "HFSPLUS_FS"
+		"NTFS_FS" "CEPH_FS" "ECRYPT_FS"
+		"SMB_SERVER" "NVME_TARGET" "TARGET_CORE"
+		"BATMAN_ADV" "IP_DCCP" "TIPC" "RDS" "ATM" "X25" "LAPB" "PHONET" "IEEE802154" "6LOWPAN"
+	)
+	opts_val["DEFAULT_MMAP_MIN_ADDR"]="32768"
+	# Vendor: add Landlock to the LSM list (mainline already has it). opts_val
+	# loses the quotes a string option needs, so set it with --set-str.
+	if [[ "${BRANCH}" == "vendor" ]]; then
+		local lsm="landlock,lockdown,yama,loadpin,safesetid,integrity,apparmor,bpf"
+		kernel_config_modifying_hashes+=("LSM=${lsm}")
+		[[ -f .config ]] && ./scripts/config --set-str LSM "${lsm}"
+	fi
+	return 0
+}
+
 # The kernel and DTB packages carry this board's DTS and kernel options, but the
 # official Armbian apt repository ships packages with the same names without
 # them: an upgrade would drop rk3566-kray-som-rkc.dtb and leave the board
@@ -383,6 +417,7 @@ function post_customize_image__kray_som_rkc_hardening() {
 	install -D -m 0644 "${src}/resolved-kray.conf" "${SDCARD}/etc/systemd/resolved.conf.d/10-kray.conf"
 	install -D -m 0644 "${src}/sysctl-kray.conf" "${SDCARD}/etc/sysctl.d/90-kray.conf"
 	install -D -m 0644 "${src}/90-kray-rk-cec.rules" "${SDCARD}/etc/udev/rules.d/90-kray-rk-cec.rules"
+	install -D -m 0644 "${src}/modprobe-kray.conf" "${SDCARD}/etc/modprobe.d/kray-blacklist.conf"
 	install -D -m 0755 "${src}/nftables.conf" "${SDCARD}/etc/nftables.conf"
 	install -d -m 0755 "${SDCARD}/etc/nftables.d"
 	install -D -m 0644 "${src}/nftables-stop.conf" \
