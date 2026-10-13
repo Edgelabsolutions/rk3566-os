@@ -41,6 +41,9 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 }
 
 # Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
+# brought up to upstream stable 6.1.189 by
+# userpatches/kernel/rk35xx-vendor-6.1/9000-linux-stable-6.1.172-to-6.1.189.patch
+# (merge and conflict resolutions: docs/kernel-stable-6.1.189-merge.md),
 # as in Armbian main (armbian/build 81e8624). The matching kernel config is in
 # userpatches/config/kernel/linux-rk35xx-vendor.config. The Unisoc uwe5622 WiFi
 # driver that Armbian v26.5.1 injects does not link against rkr7.2 (the board
@@ -49,7 +52,10 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	display_alert "$BOARD" "Using vendor kernel branch rk-6.1-rkr7.2" "info"
 	declare -g KERNELBRANCH="branch:rk-6.1-rkr7.2"
-	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622)
+	# driver_rtw88 backports newer rtw88 code into 6.1; it no longer applies on
+	# top of the merged upstream stable releases (the patch below), and the
+	# vendor image uses the out-of-tree 88XXau driver for RTL8821AU instead.
+	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622 driver_rtw88)
 }
 
 # Serial-only console: kernel log, initramfs rescue shell and login on UART2
@@ -249,6 +255,26 @@ function custom_kernel_config__kray_som_rkc_rpi_camera_drivers() {
 # tc358743 driver for the same chip is switched off. AV input: the kernel's
 # adv7180 is switched off for kray_adv7180 (userpatches/camera), which adds
 # what the Rockchip D-PHY and ISP need for the ADV7282-M.
+# Upstream 6.1.y (since the 6.1.189 merge) backported two API changes that
+# Armbian's out-of-tree Realtek Wi-Fi drivers only expect from later kernels,
+# by version number:
+# - struct usb_driver lost its drvwrap wrapper for a plain .driver member
+#   (8b7648962d41, a dependency of a use-after-free fix; mainline 6.8);
+# - cfg80211's tdls_mgmt gained a link_id argument (mainline 6.5).
+# Adapt the drivers to the backported API.
+function custom_kernel_config__kray_som_rkc_wifi_backport_compat() {
+	[[ "${BRANCH}" == "vendor" ]] || return 0
+	kernel_config_modifying_hashes+=("wifi-backport-compat=2")
+	[[ -f .config ]] || return 0
+	local f
+	for f in $(grep -rl 'drvwrap\.driver' drivers/net/wireless --include='*.c' 2>/dev/null); do
+		sed -i 's/drvwrap\.driver/driver/g' "$f"
+	done
+	for f in $(grep -rl 'int link_id,' drivers/net/wireless --include='*.c' 2>/dev/null); do
+		perl -0pi -e 's/#if \(LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 5, 0\)\)[^\n]*\n(\s*int link_id,)/#if 1 \/* tdls_mgmt link_id, backported to 6.1.y *\/\n$1/g' "$f"
+	done
+}
+
 function custom_kernel_config__kray_som_rkc_camera_drivers() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
 	kernel_config_modifying_hashes+=("cameras=imx708,imx327,ov9281,ak7375=y;imx378,imx258,imx335,imx415,imx290,dw9807,tc358743,adv7180=n")
