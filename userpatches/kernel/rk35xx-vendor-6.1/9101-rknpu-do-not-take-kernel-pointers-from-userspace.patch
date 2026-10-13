@@ -1,0 +1,242 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Tue, 13 Oct 2026 19:28:40 +0300
+Subject: [PATCH 9101/9103] rknpu: do not take kernel pointers from userspace
+
+RKNPU_MEM_CREATE returned the object's kernel address as obj_addr, and
+RKNPU_SUBMIT (task_obj_addr) and RKNPU_MEM_SYNC (obj_addr) cast whatever
+userspace passed back to a struct rknpu_gem_object pointer, took a
+reference and indexed task_base[] from it: an arbitrary kernel pointer
+dereference reachable through the render node, plus a kernel address
+leak.
+
+obj_addr is now the object address XORed with a per-boot random value,
+and incoming values are only accepted when they name a GEM object the
+calling DRM file holds a handle to (the reference is held while the
+driver uses it). SUBMIT also checks task_start/task_number (and the
+subcore ranges) against the task object size, and MEM_SYNC checks
+offset/size against the object size. The ioctl ABI is unchanged:
+librknnrt treats obj_addr as an opaque token.
+---
+ drivers/rknpu/include/rknpu_gem.h |  4 ++
+ drivers/rknpu/rknpu_gem.c         | 92 ++++++++++++++++++++++++++++---
+ drivers/rknpu/rknpu_job.c         | 48 +++++++++++++++-
+ 3 files changed, 136 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/rknpu/include/rknpu_gem.h b/drivers/rknpu/include/rknpu_gem.h
+index 61e8fa22c22b..7eebc92b5240 100644
+--- a/drivers/rknpu/include/rknpu_gem.h
++++ b/drivers/rknpu/include/rknpu_gem.h
+@@ -80,6 +80,10 @@ rknpu_gem_object_create(struct drm_device *dev, unsigned int flags,
+ void rknpu_gem_object_destroy(struct rknpu_gem_object *rknpu_obj);
+ 
+ /* request gem object creation and buffer allocation as the size */
++u64 rknpu_gem_obj_cookie(struct rknpu_gem_object *rknpu_obj);
++struct rknpu_gem_object *rknpu_gem_object_get_by_cookie(struct drm_file *file_priv,
++							u64 cookie);
++
+ int rknpu_gem_create_ioctl(struct drm_device *dev, void *data,
+ 			   struct drm_file *file_priv);
+ 
+diff --git a/drivers/rknpu/rknpu_gem.c b/drivers/rknpu/rknpu_gem.c
+index f1346f98fff6..ab02d109d255 100644
+--- a/drivers/rknpu/rknpu_gem.c
++++ b/drivers/rknpu/rknpu_gem.c
+@@ -17,6 +17,8 @@
+ #include <linux/pfn_t.h>
+ #include <linux/version.h>
+ #include <linux/version_compat_defs.h>
++#include <linux/idr.h>
++#include <linux/random.h>
+ #include <asm/cacheflush.h>
+ 
+ #if KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE
+@@ -873,6 +875,66 @@ void rknpu_gem_object_destroy(struct rknpu_gem_object *rknpu_obj)
+ 	rknpu_iommu_domain_put(rknpu_dev);
+ }
+ 
++/*
++ * Userspace refers to RKNPU objects by the obj_addr value that
++ * RKNPU_MEM_CREATE returns; librknnrt passes it back as obj_addr of
++ * RKNPU_MEM_SYNC and task_obj_addr of RKNPU_SUBMIT. That value used to be
++ * the object's kernel address, and the driver dereferenced whatever
++ * userspace passed in (an arbitrary kernel pointer) and leaked kernel
++ * addresses. obj_addr is now the address XORed with a per-boot random value,
++ * and an incoming value is only accepted if it names an object that the
++ * calling DRM file holds a handle to. The ABI is unchanged: userspace treats
++ * obj_addr as an opaque token.
++ */
++static u64 rknpu_obj_secret;
++
++static u64 rknpu_gem_obj_secret(void)
++{
++	u64 s = READ_ONCE(rknpu_obj_secret);
++
++	if (unlikely(!s)) {
++		do {
++			s = get_random_u64();
++		} while (!s);
++		cmpxchg64(&rknpu_obj_secret, 0, s);
++		s = READ_ONCE(rknpu_obj_secret);
++	}
++	return s;
++}
++
++u64 rknpu_gem_obj_cookie(struct rknpu_gem_object *rknpu_obj)
++{
++	return (u64)(uintptr_t)rknpu_obj ^ rknpu_gem_obj_secret();
++}
++
++/*
++ * Look up the object that @cookie names among the objects @file_priv holds
++ * handles to. Returns it with a reference held (drop it with
++ * rknpu_gem_object_put()), or NULL.
++ */
++struct rknpu_gem_object *rknpu_gem_object_get_by_cookie(struct drm_file *file_priv,
++							u64 cookie)
++{
++	struct rknpu_gem_object *found = NULL;
++	struct drm_gem_object *obj;
++	int id;
++
++	if (!file_priv || !cookie)
++		return NULL;
++
++	spin_lock(&file_priv->table_lock);
++	idr_for_each_entry(&file_priv->object_idr, obj, id) {
++		if (rknpu_gem_obj_cookie(to_rknpu_obj(obj)) == cookie) {
++			drm_gem_object_get(obj);
++			found = to_rknpu_obj(obj);
++			break;
++		}
++	}
++	spin_unlock(&file_priv->table_lock);
++
++	return found;
++}
++
+ int rknpu_gem_create_ioctl(struct drm_device *drm, void *data,
+ 			   struct drm_file *file_priv)
+ {
+@@ -901,7 +963,7 @@ int rknpu_gem_create_ioctl(struct drm_device *drm, void *data,
+ 
+ 	args->size = rknpu_obj->size;
+ 	args->sram_size = rknpu_obj->sram_size;
+-	args->obj_addr = (__u64)(uintptr_t)rknpu_obj;
++	args->obj_addr = rknpu_gem_obj_cookie(rknpu_obj);
+ 	args->dma_addr = rknpu_obj->dma_addr;
+ 
+ 	return 0;
+@@ -1664,12 +1726,11 @@ static int rknpu_cache_sync(struct rknpu_gem_object *rknpu_obj,
+ 	return 0;
+ }
+ 
+-int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
+-			 struct drm_file *file_priv)
++static int rknpu_gem_sync_obj(struct drm_device *dev,
++			      struct rknpu_gem_object *rknpu_obj,
++			      struct rknpu_mem_sync *args)
+ {
+-	struct rknpu_gem_object *rknpu_obj = NULL;
+ 	struct rknpu_device *rknpu_dev = dev->dev_private;
+-	struct rknpu_mem_sync *args = data;
+ 	struct scatterlist *sg;
+ 	dma_addr_t sg_phys_addr;
+ 	unsigned long length, offset = 0;
+@@ -1677,8 +1738,8 @@ int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
+ 	unsigned long len = 0;
+ 	int i;
+ 
+-	rknpu_obj = (struct rknpu_gem_object *)(uintptr_t)args->obj_addr;
+-	if (!rknpu_obj)
++	if (args->offset > rknpu_obj->size ||
++	    args->size > rknpu_obj->size - args->offset)
+ 		return -EINVAL;
+ 
+ 	if (!(rknpu_obj->flags & RKNPU_MEM_CACHEABLE))
+@@ -1755,3 +1816,20 @@ int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
+ 
+ 	return 0;
+ }
++
++int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
++			 struct drm_file *file_priv)
++{
++	struct rknpu_mem_sync *args = data;
++	struct rknpu_gem_object *rknpu_obj;
++	int ret;
++
++	rknpu_obj = rknpu_gem_object_get_by_cookie(file_priv, args->obj_addr);
++	if (!rknpu_obj)
++		return -EINVAL;
++
++	ret = rknpu_gem_sync_obj(dev, rknpu_obj, args);
++	rknpu_gem_object_put(&rknpu_obj->base);
++
++	return ret;
++}
+diff --git a/drivers/rknpu/rknpu_job.c b/drivers/rknpu/rknpu_job.c
+index 57d67d81f7d5..e01fa0bb9689 100644
+--- a/drivers/rknpu/rknpu_job.c
++++ b/drivers/rknpu/rknpu_job.c
+@@ -846,13 +846,59 @@ static int rknpu_submit(struct rknpu_device *rknpu_dev,
+ }
+ 
+ #ifdef CONFIG_ROCKCHIP_RKNPU_DRM_GEM
++static bool rknpu_task_range_ok(struct rknpu_gem_object *task_obj, u32 start,
++				u32 number)
++{
++	u64 end = (u64)start + number;
++
++	return end * sizeof(struct rknpu_task) <= task_obj->size;
++}
++
+ int rknpu_submit_ioctl(struct drm_device *dev, void *data,
+ 		       struct drm_file *file_priv)
+ {
+ 	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev->dev);
+ 	struct rknpu_submit *args = data;
++	struct rknpu_gem_object *task_obj = NULL;
++	u64 cookie = args->task_obj_addr;
++	int i, ret;
++
++	/*
++	 * task_obj_addr is the obj_addr token from RKNPU_MEM_CREATE (see
++	 * rknpu_gem_object_get_by_cookie()); only an object this file holds a
++	 * handle to is accepted, and the task indices must lie inside it. For
++	 * the duration of the submit the driver works with the object pointer;
++	 * userspace gets its token back. A blocking job is cleaned up before
++	 * rknpu_submit() returns, a non-blocking job keeps its own copy of the
++	 * arguments and its own object reference.
++	 */
++	if (cookie) {
++		task_obj = rknpu_gem_object_get_by_cookie(file_priv, cookie);
++		if (!task_obj)
++			return -EINVAL;
+ 
+-	return rknpu_submit(rknpu_dev, args);
++		ret = -EINVAL;
++		if (!task_obj->kv_addr ||
++		    !rknpu_task_range_ok(task_obj, args->task_start,
++					 args->task_number))
++			goto out_put;
++		for (i = 0; i < ARRAY_SIZE(args->subcore_task); i++)
++			if (!rknpu_task_range_ok(task_obj,
++						 args->subcore_task[i].task_start,
++						 args->subcore_task[i].task_number))
++				goto out_put;
++
++		args->task_obj_addr = (__u64)(uintptr_t)task_obj;
++	}
++
++	ret = rknpu_submit(rknpu_dev, args);
++	args->task_obj_addr = cookie;
++
++out_put:
++	if (task_obj)
++		rknpu_gem_object_put(&task_obj->base);
++
++	return ret;
+ }
+ #endif
+ 

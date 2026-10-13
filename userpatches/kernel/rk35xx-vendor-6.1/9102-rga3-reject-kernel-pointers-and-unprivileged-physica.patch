@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Tue, 13 Oct 2026 19:28:40 +0300
+Subject: [PATCH 9102/9103] rga3: reject kernel pointers and unprivileged
+ physical addresses
+
+RGA_IOC_IMPORT_BUFFER accepted the buffer type RGA_DMA_BUFFER_PTR from
+userspace and then used the user value as a struct dma_buf pointer
+(get_dma_buf(), dma_buf_attach() through its ops). The type is meant for
+in-kernel users only and is now refused from the ioctl.
+
+Physical addresses, in imports and in requests (uv_addr without MMU),
+let the RGA engine read and write any memory; they now need
+CAP_SYS_RAWIO. Users of dma-buf fds and virtual addresses are not
+affected.
+---
+ drivers/video/rockchip/rga3/rga_drv.c | 16 ++++++++++++++++
+ drivers/video/rockchip/rga3/rga_mm.c  |  7 +++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/drivers/video/rockchip/rga3/rga_drv.c b/drivers/video/rockchip/rga3/rga_drv.c
+index 0a5d8524362f..f24fbff218fd 100644
+--- a/drivers/video/rockchip/rga3/rga_drv.c
++++ b/drivers/video/rockchip/rga3/rga_drv.c
+@@ -698,6 +698,22 @@ static long rga_ioctl_import_buffer(unsigned long arg, struct rga_session *sessi
+ 			rga_dump_external_buffer(&external_buffer[i]);
+ 		}
+ 
++		/*
++		 * RGA_DMA_BUFFER_PTR carries a kernel struct dma_buf pointer and
++		 * is only for in-kernel users (rga_mpi_set_channel_buffer()). A
++		 * physical address lets the RGA engine read and write any
++		 * memory, so it needs CAP_SYS_RAWIO.
++		 */
++		if (external_buffer[i].type == RGA_DMA_BUFFER_PTR ||
++		    (external_buffer[i].type == RGA_PHYSICAL_ADDRESS &&
++		     !capable(CAP_SYS_RAWIO))) {
++			rga_err("buffer[%d] memory type %s not allowed from userspace\n",
++				i, rga_get_memory_type_str(external_buffer[i].type));
++			ret = -EPERM;
++
++			goto err_free_external_buffer;
++		}
++
+ 		ret = rga_mm_import_buffer(&external_buffer[i], session);
+ 		if (ret <= 0) {
+ 			rga_err("buffer[%d] mm import buffer failed! memory = 0x%lx, type = %s(0x%x)\n",
+diff --git a/drivers/video/rockchip/rga3/rga_mm.c b/drivers/video/rockchip/rga3/rga_mm.c
+index 6473b432101f..957266528847 100644
+--- a/drivers/video/rockchip/rga3/rga_mm.c
++++ b/drivers/video/rockchip/rga3/rga_mm.c
+@@ -2133,6 +2133,13 @@ static int rga_mm_get_channel_external_buffer(int mmu_flag,
+ 		external_buffer->memory = (uint64_t)img_info->uv_addr;
+ 		external_buffer->type = RGA_VIRTUAL_ADDRESS;
+ 	} else if (img_info->uv_addr) {
++		/* a physical address from the request: the RGA engine could
++		 * read and write any memory, so require CAP_SYS_RAWIO */
++		if (!capable(CAP_SYS_RAWIO)) {
++			rga_err("physical address buffers need CAP_SYS_RAWIO\n");
++			kfree(external_buffer);
++			return -EPERM;
++		}
+ 		external_buffer->memory = (uint64_t)img_info->uv_addr;
+ 		external_buffer->type = RGA_PHYSICAL_ADDRESS;
+ 	} else {

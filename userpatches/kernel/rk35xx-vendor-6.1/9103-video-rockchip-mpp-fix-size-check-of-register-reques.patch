@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Tue, 13 Oct 2026 19:28:40 +0300
+Subject: [PATCH 9103/9103] video: rockchip: mpp: fix size check of register
+ requests
+
+mpp_check_req() handled a request reaching past max_size by setting its
+size to req_off + size - max_size and returning success; callers then
+copied that many bytes from userspace into task->reg at req_off, past
+the end of the register buffer (rkvdec2, vepu2, rkvenc, vdpu, jpeg and
+others). Truncate the request to max_size - req_off instead, and do the
+offset arithmetic in 64 bits so that offset + size cannot wrap.
+---
+ drivers/video/rockchip/mpp/mpp_common.c | 25 ++++++++++++++++---------
+ 1 file changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/video/rockchip/mpp/mpp_common.c b/drivers/video/rockchip/mpp/mpp_common.c
+index 80c263ac081e..db3966919c36 100644
+--- a/drivers/video/rockchip/mpp/mpp_common.c
++++ b/drivers/video/rockchip/mpp/mpp_common.c
+@@ -1914,33 +1914,40 @@ int mpp_translate_reg_address(struct mpp_session *session,
+ int mpp_check_req(struct mpp_request *req, int base,
+ 		  int max_size, u32 off_s, u32 off_e)
+ {
+-	int req_off;
++	/*
++	 * 64-bit arithmetic: req->offset and req->size come from userspace and
++	 * their sum must not wrap. A request reaching past max_size is
++	 * truncated to max_size; it used to get size req_off + size - max_size,
++	 * which callers then copied into task->reg past its end.
++	 */
++	u64 req_off, req_end;
+ 
+-	if (req->offset < base) {
++	if (base < 0 || max_size < 0 || req->offset < (u32)base) {
+ 		mpp_err("error: base %x, offset %x\n",
+ 			base, req->offset);
+ 		return -EINVAL;
+ 	}
+ 	req_off = req->offset - base;
+-	if ((req_off + req->size) < off_s) {
+-		mpp_err("error: req_off %x, req_size %x, off_s %x\n",
++	req_end = req_off + req->size;
++	if (req_end < off_s) {
++		mpp_err("error: req_off %llx, req_size %x, off_s %x\n",
+ 			req_off, req->size, off_s);
+ 		return -EINVAL;
+ 	}
+-	if (max_size < off_e) {
++	if ((u32)max_size < off_e) {
+ 		mpp_err("error: off_e %x, max_size %x\n",
+ 			off_e, max_size);
+ 		return -EINVAL;
+ 	}
+ 	if (req_off > max_size) {
+-		mpp_err("error: req_off %x, max_size %x\n",
++		mpp_err("error: req_off %llx, max_size %x\n",
+ 			req_off, max_size);
+ 		return -EINVAL;
+ 	}
+-	if ((req_off + req->size) > max_size) {
+-		mpp_err("error: req_off %x, req_size %x, max_size %x\n",
++	if (req_end > max_size) {
++		mpp_err("error: req_off %llx, req_size %x, max_size %x\n",
+ 			req_off, req->size, max_size);
+-		req->size = req_off + req->size - max_size;
++		req->size = max_size - req_off;
+ 	}
+ 
+ 	return 0;
