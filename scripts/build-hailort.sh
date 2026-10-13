@@ -71,7 +71,7 @@ cat > "${STAGE}/DEBIAN/control" <<-EOF
 	Section: libs
 	Priority: optional
 	Description: Hailo AI accelerator runtime (libhailort, hailortcli)
-	 HailoRT ${HAILO_VERSION} for Hailo-8 devices on PCIe, built by kray-som-rkc-os
+	 HailoRT ${HAILO_VERSION} for Hailo-8 devices on PCIe, built by rk3566-os
 	 scripts/build-hailort.sh. Needs the hailo_pci driver and firmware of the same version.
 EOF
 mkdir -p "${OUT}"

@@ -156,7 +156,7 @@ make_deb() { # package stagedir depends description
 		Section: video
 		Priority: optional
 		Description: ${desc}
-		 Built by kray-som-rkc-os scripts/build-multimedia.sh for the Rockchip vendor kernel.
+		 Built by rk3566-os scripts/build-multimedia.sh for the Rockchip vendor kernel.
 	EOF
 	dpkg-deb --root-owner-group -Zxz --build "${dir}" "${OUT}/${pkg}_${PKG_VERSION}_arm64.deb" >/dev/null
 	log "Packaged ${pkg}"

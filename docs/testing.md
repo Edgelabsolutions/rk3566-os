@@ -16,8 +16,8 @@ Record what was run: image file name and SHA-256, board, kernel (`uname -r`).
 ## 1. Flash and first boot
 
 ```bash
-sha256sum -c kray-som-rkc-os-<version>-trixie-<branch>-<kernel>.img.xz.sha256
-xzcat kray-som-rkc-os-<version>-trixie-<branch>-<kernel>.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
+sha256sum -c rk3566-os-<version>-trixie-<branch>-<kernel>.img.xz.sha256
+xzcat rk3566-os-<version>-trixie-<branch>-<kernel>.img.xz | sudo dd of=/dev/sdX bs=4M conv=fsync status=progress
 ```
 
 Connect UART2 (1500000 8N1), Ethernet, HDMI, a USB hub with the USB WiFi adapter and, on Kray-SoM-RKC, an M.2 card (NVMe or Hailo-8). Watch the serial console:
