@@ -16,6 +16,8 @@ SYSROOT="${WORK}/sysroot"
 BUILD="${WORK}/build"
 STAGE="${WORK}/stage"
 TRIPLET=aarch64-linux-gnu
+# shellcheck source=../userpatches/hardening/build-flags.sh
+. "${ROOT}/userpatches/hardening/build-flags.sh"
 
 HAILO_VERSION=4.24.0
 PKG_VERSION="${PKG_VERSION:-${HAILO_VERSION}~kray1}"
@@ -39,9 +41,19 @@ cat > "${WORK}/toolchain.cmake" <<-EOF
 	set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 	set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 	set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+	set(CMAKE_C_FLAGS_INIT "${KRAY_HARDEN_LIB_CFLAGS}")
+	set(CMAKE_CXX_FLAGS_INIT "${KRAY_HARDEN_LIB_CFLAGS}")
+	set(CMAKE_SHARED_LINKER_FLAGS_INIT "${KRAY_HARDEN_LIB_LDFLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS_INIT "${KRAY_HARDEN_LDFLAGS}")
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 EOF
 
 log "Building HailoRT ${HAILO_VERSION}"
+# Fresh build dir: CMake only applies the toolchain's *_FLAGS_INIT once.
+# HailoRT also fetches its dependencies into hailort/external in the source
+# tree; clear that too so they are rebuilt with the same flags.
+rm -rf "${BUILD}"
+git -C "${SRC}" clean -xdfq hailort/external
 cmake -S "${SRC}" -B "${BUILD}" -G Ninja -Wno-dev \
 	-DCMAKE_TOOLCHAIN_FILE="${WORK}/toolchain.cmake" \
 	-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \

@@ -8,7 +8,8 @@
 # Extra KEY=VALUE arguments are passed through to Armbian's compile.sh.
 set -euo pipefail
 
-ARMBIAN_TAG="${ARMBIAN_TAG:-v26.5.1}"
+ARMBIAN_TAG="v26.5.1"
+ARMBIAN_COMMIT="8de11a017f7f05a82c77850f8322928cb6a3b70c"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 ARMBIAN="${ROOT}/armbian-build"
 
@@ -16,6 +17,8 @@ if [[ ! -d "${ARMBIAN}/.git" ]]; then
 	echo "==> Cloning armbian/build ${ARMBIAN_TAG}"
 	git -c advice.detachedHead=false clone -q --depth 1 --branch "${ARMBIAN_TAG}" https://github.com/armbian/build "${ARMBIAN}"
 fi
+[[ "$(git -C "${ARMBIAN}" rev-parse HEAD)" == "${ARMBIAN_COMMIT}" ]] ||
+	{ echo "armbian-build is not at ${ARMBIAN_TAG} (${ARMBIAN_COMMIT})" >&2; exit 1; }
 
 "${ROOT}/scripts/fetch-npu.sh"
 "${ROOT}/scripts/fetch-hailo.sh"

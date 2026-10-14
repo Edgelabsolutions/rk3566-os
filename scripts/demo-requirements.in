@@ -1,0 +1,13 @@
+# Python packages for converting YOLOv8n to RKNN (scripts/build-demo.sh).
+# Lock file: scripts/demo-requirements.txt, regenerate with
+#   uv pip compile --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-unknown-linux-gnu \
+#     scripts/demo-requirements.in -o scripts/demo-requirements.txt
+rknn-toolkit2==2.3.2
+onnx==1.16.1
+onnxruntime==1.18.1
+setuptools==69.5.1
+# rknn-toolkit2 needs opencv-python; the build swaps it for the headless
+# build of the same version, which needs no GUI libraries.
+opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84

@@ -50,8 +50,10 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 # has no such chip), so it is skipped.
 function post_family_config__kray_som_rkc_vendor_rkr72() {
 	[[ "${BRANCH}" == "vendor" ]] || return 0
-	display_alert "$BOARD" "Using vendor kernel branch rk-6.1-rkr7.2" "info"
-	declare -g KERNELBRANCH="branch:rk-6.1-rkr7.2"
+	display_alert "$BOARD" "Using vendor kernel rk-6.1-rkr7.2 at 453efc7fb4ab" "info"
+	# Pinned to a commit of branch rk-6.1-rkr7.2: the stable merge patch 9000
+	# is made against it, and the branch can move.
+	declare -g KERNELBRANCH="commit:453efc7fb4ab346541693620d21e3cc4b73b8d3c"
 	# driver_rtw88 backports newer rtw88 code into 6.1; it no longer applies on
 	# top of the merged upstream stable releases (the patch below), and the
 	# vendor image uses the out-of-tree 88XXau driver for RTL8821AU instead.
@@ -336,9 +338,12 @@ function post_customize_image__kray_som_rkc_camera_tools() {
 	local cxx="${KRAY_CROSS_COMPILE:-aarch64-linux-gnu-}g++"
 	if command -v "${cxx}" > /dev/null; then
 		display_alert "$BOARD" "Building kray-cam-3a" "info"
-		"${cxx}" -O2 -Wall -std=c++17 -I"${USERPATCHES_PATH}/demo/src/uapi" \
+		# shellcheck source=../../hardening/build-flags.sh
+		. "${USERPATCHES_PATH}/hardening/build-flags.sh"
+		# shellcheck disable=SC2086
+		"${cxx}" ${KRAY_HARDEN_CFLAGS} -Wall -std=c++17 -I"${USERPATCHES_PATH}/demo/src/uapi" \
 			-o "${SDCARD}/usr/bin/kray-cam-3a" "${src}/kray-cam-3a/kray-cam-3a.cpp" \
-			-static-libstdc++ -static-libgcc ||
+			${KRAY_HARDEN_LDFLAGS} -static-libstdc++ -static-libgcc ||
 			exit_with_error "kray-cam-3a did not build"
 		"${cxx%g++}strip" "${SDCARD}/usr/bin/kray-cam-3a"
 		install -D -m 0644 "${src}/kray-cam-3a/kray-cam-3a.conf" "${SDCARD}/etc/kray-cam-3a.conf"
