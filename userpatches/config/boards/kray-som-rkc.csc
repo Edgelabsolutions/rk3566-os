@@ -146,13 +146,12 @@ function custom_kernel_config__kray_som_rkc_hardening() {
 		"BATMAN_ADV" "IP_DCCP" "TIPC" "RDS" "ATM" "X25" "LAPB" "PHONET" "IEEE802154" "6LOWPAN"
 	)
 	opts_val["DEFAULT_MMAP_MIN_ADDR"]="32768"
-	# Vendor: add Landlock to the LSM list (mainline already has it). opts_val
-	# loses the quotes a string option needs, so set it with --set-str.
-	if [[ "${BRANCH}" == "vendor" ]]; then
-		local lsm="landlock,lockdown,yama,loadpin,safesetid,integrity,apparmor,bpf"
-		kernel_config_modifying_hashes+=("LSM=${lsm}")
-		[[ -f .config ]] && ./scripts/config --set-str LSM "${lsm}"
-	fi
+	# Add Landlock in front of each kernel's LSM list. opts_val loses the
+	# quotes a string option needs, so set it with --set-str.
+	local lsm="landlock,lockdown,yama,integrity,apparmor"
+	[[ "${BRANCH}" == "vendor" ]] && lsm="landlock,lockdown,yama,loadpin,safesetid,integrity,apparmor,bpf"
+	kernel_config_modifying_hashes+=("LSM=${lsm}")
+	[[ -f .config ]] && ./scripts/config --set-str LSM "${lsm}"
 	return 0
 }
 
