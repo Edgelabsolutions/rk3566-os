@@ -122,6 +122,14 @@ See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
+The decoders take about 3 ms per 1080p frame, but only if the next element accepts their buffers as they are, without a CPU copy. A copy from their uncached buffers takes about 20 ms per frame for H.264 and 190 ms for H.265.
+- **Use a sink that accepts `GstVideoMeta`:** `kmssink`, `waylandsink`, `glimagesink`, or `fakevideosink` for timing. `fakesink` makes GStreamer copy every frame, because the decoders deliver 1088-line buffers for 1080p.
+- **1080p H.265:** Debian's GStreamer 1.26 `v4l2slh265dec` copies every frame of a stream with a cropping window. 1080p H.265 is almost always coded as 1088 lines and cropped, which limited such streams to about 5 fps. The image replaces the plugin with one rebuilt from the same Debian source plus [our patch](userpatches/gstreamer/), which hands over right/bottom-cropped frames without a copy (`scripts/build-gst-v4l2codecs.sh`, package `gstreamer1.0-v4l2codecs-kray`). Removing that package brings back Debian's plugin.
+
+```bash
+gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! v4l2slh264dec ! kmssink
+```
+
 ### System updates
 
 `apt upgrade` and `armbian-upgrade` are safe to use, with one exception: the kernel and DTB packages (`linux-image-<branch>-<family>`, `linux-dtb-<branch>-<family>`) are marked **hold** in the image. The official Armbian repository ships packages with the same names that do not contain `rk3566-kray-som-rkc.dtb` or this board's kernel options, so installing them would leave the board unbootable. Update the kernel by flashing a new release or by installing the `.deb` packages built from this repository.
@@ -138,6 +146,7 @@ scripts/fetch-npu.sh                       RKNN SDK + NPU test
 scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .deb packages
 scripts/fetch-hailo.sh                     Hailo-8 driver sources + firmware (4.24.0)
 scripts/build-hailort.sh                   HailoRT .deb (libhailort, hailortcli)
+scripts/build-gst-v4l2codecs.sh            patched GStreamer v4l2codecs .deb for mainline images
 scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
 scripts/check-hardening.sh                 checks binaries for stack protector, RELRO, PIE (docs/security.md)
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
@@ -154,6 +163,7 @@ userpatches/
   camera/<driver>/                         camera drivers from Raspberry Pi's kernel, adapted for Rockchip
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
   demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
+  gstreamer/                               GStreamer v4l2codecs patch (zero-copy 1080p H.265 on mainline)
   atf/atf-kray-som-rkc/                    TF-A patch (docs/security.md)
   hardening/                               SSH, resolved, nftables, sysctl, udev, modprobe defaults; compiler flags (docs/security.md)
 ```

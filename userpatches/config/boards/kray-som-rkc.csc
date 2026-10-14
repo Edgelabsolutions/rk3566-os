@@ -218,6 +218,26 @@ function post_customize_image__kray_som_rkc_multimedia() {
 	chroot_sdcard ldconfig
 }
 
+# Mainline: GStreamer's v4l2codecs plugin rebuilt with our patch, so that
+# v4l2slh265dec hands over 1080p frames without a CPU copy
+# (scripts/build-gst-v4l2codecs.sh, userpatches/gstreamer/). The package
+# diverts the plugin of gstreamer1.0-plugins-bad.
+function post_customize_image__kray_som_rkc_gst_v4l2codecs() {
+	[[ "${BRANCH}" != "vendor" ]] || return 0
+	local src="${USERPATCHES_PATH}/gstreamer" deb
+	if ! compgen -G "${src}/*.deb" > /dev/null; then
+		display_alert "$BOARD" "No v4l2codecs package in ${src}; run scripts/build-gst-v4l2codecs.sh" "wrn"
+		return 0
+	fi
+	display_alert "$BOARD" "Installing the patched GStreamer v4l2codecs plugin" "info"
+	mkdir -p "${SDCARD}/tmp/kray-gst"
+	for deb in "${src}"/*.deb; do
+		cp "${deb}" "${SDCARD}/tmp/kray-gst/"
+		chroot_sdcard dpkg -i "/tmp/kray-gst/${deb##*/}"
+	done
+	rm -rf "${SDCARD}/tmp/kray-gst"
+}
+
 # Hailo-8 AI accelerator on the M.2 PCIe slot (all branches).
 # scripts/fetch-hailo.sh stages hailort-drivers 4.24.0 and the firmware in
 # userpatches/hailo; scripts/build-hailort.sh builds the HailoRT .deb.

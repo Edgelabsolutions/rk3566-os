@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Wed, 14 Oct 2026 23:33:26 +0300
+Subject: [PATCH] v4l2codecs: h265dec: don't copy frames for right/bottom-only
+ cropping
+
+When downstream supports GstVideoMeta, a conformance window that only
+crops the right and bottom edges needs no copy: the output caps already
+carry the display size and the video meta carries the real strides and
+plane offsets, as v4l2slh264dec does. 1080p streams are coded as 1088
+lines and cropped this way, so until now every 1080p frame was copied.
+
+The copy reads from the decoder's uncached CAPTURE buffers. On a
+Rockchip RK3566 (rkvdec, mainline 6.18) a 1080p stream decoded at about
+5 fps into kmssink; without the copy it is about 320 fps into
+fakevideosink and display rate into kmssink.
+---
+ sys/v4l2codecs/gstv4l2codech265dec.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/sys/v4l2codecs/gstv4l2codech265dec.c b/sys/v4l2codecs/gstv4l2codech265dec.c
+index 72ca794..7735d7f 100644
+--- a/sys/v4l2codecs/gstv4l2codech265dec.c
++++ b/sys/v4l2codecs/gstv4l2codech265dec.c
+@@ -1012,7 +1012,12 @@ gst_v4l2_codec_h265_dec_new_sequence (GstH265Decoder * decoder,
+       }
+     }
+   } else {
+-    self->copy_frames = self->need_crop;
++    /* With GstVideoMeta, a crop of the right and bottom edges only needs
++     * no copy: downstream takes the display size from the caps and the
++     * buffer layout from the meta, as with v4l2slh264dec. 1080p streams
++     * are coded as 1088 lines and cropped this way. */
++    self->copy_frames = self->need_crop &&
++        (self->crop_rect_x != 0 || self->crop_rect_y != 0);
+   }
+ 
+   return GST_FLOW_OK;

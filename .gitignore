@@ -16,6 +16,9 @@
 /userpatches/hailo/driver/
 /userpatches/hailo/firmware/
 /userpatches/hailo/*.deb
+
+# Patched GStreamer v4l2codecs plugin for mainline images (scripts/build-gst-v4l2codecs.sh)
+/userpatches/gstreamer/*.deb
 # written by HailoRT tools run on the build host
 /hailort.log
 

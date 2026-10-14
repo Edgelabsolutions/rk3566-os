@@ -35,6 +35,12 @@ if ! compgen -G "${ROOT}/userpatches/hailo/*.deb" > /dev/null; then
 	"${ROOT}/scripts/build-hailort.sh"
 fi
 
+# Patched GStreamer V4L2 stateless decoder plugin for mainline images. Built
+# once and reused; delete userpatches/gstreamer/*.deb to rebuild it.
+if ! compgen -G "${ROOT}/userpatches/gstreamer/*.deb" > /dev/null; then
+	"${ROOT}/scripts/build-gst-v4l2codecs.sh"
+fi
+
 # Exhibition demo image (./build.sh KRAY_DEMO=yes): program and NPU model.
 if [[ " $* " == *" KRAY_DEMO=yes "* ]]; then
 	"${ROOT}/scripts/build-demo.sh"

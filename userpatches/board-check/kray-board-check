@@ -155,6 +155,8 @@ elif [[ "${BRANCH}" == vendor ]]; then
 	[[ -n "${dec5}" ]] && result PASS "h265 decode (mppvideodec)" "300 frames, ${dec5#*after }" || result FAIL "h265 decode (mppvideodec)"
 else
 	# Mainline has no hardware encoder: make the test stream with a software one.
+	# fakevideosink accepts GstVideoMeta, so the decoders hand over their
+	# 1088-line buffers without a CPU copy; fakesink would time the copy.
 	enc=""
 	for e in x264enc openh264enc; do
 		gst-inspect-1.0 "${e}" >/dev/null 2>&1 && { enc="${e}"; break; }
@@ -165,13 +167,15 @@ else
 		opts=""; [[ "${enc}" == x264enc ]] && opts="speed-preset=ultrafast"
 		gst-launch-1.0 -q videotestsrc num-buffers=300 ! video/x-raw,width=1920,height=1080,format=I420 \
 			! ${enc} ${opts} ! h264parse ! mp4mux ! filesink location="${WORK}/t.mp4" 2>/dev/null
-		dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! v4l2slh264dec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+		dec="$(gst-launch-1.0 filesrc location="${WORK}/t.mp4" ! qtdemux ! h264parse ! v4l2slh264dec ! fakevideosink sync=false 2>&1 | grep 'Execution ended')"
 		[[ -n "${dec}" ]] && result PASS "h264 decode (v4l2slh264dec)" "300 frames, ${dec#*after }" || result FAIL "h264 decode (v4l2slh264dec)"
 	fi
 	if gst-inspect-1.0 x265enc >/dev/null 2>&1; then
+		# 1080p is coded as 1088 lines and cropped; the image's patched
+		# v4l2codecs plugin hands such frames over without a CPU copy.
 		gst-launch-1.0 -q videotestsrc num-buffers=300 ! video/x-raw,width=1920,height=1080,format=I420 \
 			! x265enc speed-preset=ultrafast ! h265parse ! mp4mux ! filesink location="${WORK}/t5.mp4" 2>/dev/null
-		dec5="$(gst-launch-1.0 filesrc location="${WORK}/t5.mp4" ! qtdemux ! h265parse ! v4l2slh265dec ! fakesink sync=false 2>&1 | grep 'Execution ended')"
+		dec5="$(gst-launch-1.0 filesrc location="${WORK}/t5.mp4" ! qtdemux ! h265parse ! v4l2slh265dec ! fakevideosink sync=false 2>&1 | grep 'Execution ended')"
 		[[ -n "${dec5}" ]] && result PASS "h265 decode (v4l2slh265dec)" "300 frames, ${dec5#*after }" || result FAIL "h265 decode (v4l2slh265dec)"
 	else
 		result SKIP "h265 decode (v4l2slh265dec)" "no x265enc (GStreamer x265 plugin) to make the test file"
