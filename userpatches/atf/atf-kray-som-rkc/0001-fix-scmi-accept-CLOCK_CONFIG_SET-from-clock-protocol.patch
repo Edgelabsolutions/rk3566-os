@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Wed, 14 Oct 2026 20:14:56 +0300
+Subject: [PATCH] fix(scmi): accept CLOCK_CONFIG_SET from clock protocol v1/v2
+ agents
+
+Agents that implement SCMI clock protocol v1 or v2 send CLOCK_CONFIG_SET
+with only clock_id and attributes (8 bytes); the extended_config_val
+field was added in v3. The server advertises v3 but answered the shorter
+message with PROTOCOL_ERROR, so such agents cannot enable any clock.
+
+Linux before 6.7 is such an agent: on RK3568 with the Rockchip 6.1
+kernel the NPU and GPU failed to probe with 'Failed to prepare clk
+scmi_clk: -71'.
+
+Accept both lengths. With the short form, an extended config type cannot
+be applied and is rejected as invalid.
+
+Signed-off-by: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+---
+ drivers/scmi-msg/clock.c | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/scmi-msg/clock.c b/drivers/scmi-msg/clock.c
+index 1e5d7776e..78f3b4016 100644
+--- a/drivers/scmi-msg/clock.c
++++ b/drivers/scmi-msg/clock.c
+@@ -4,6 +4,7 @@
+  * Copyright (c) 2019-2020, Linaro Limited
+  */
+ #include <cdefs.h>
++#include <stddef.h>
+ #include <string.h>
+ 
+ #include <drivers/scmi-msg.h>
+@@ -476,7 +477,13 @@ static void scmi_clock_config_set(struct scmi_msg *msg)
+ 	unsigned int clock_id = 0U;
+ 	uint8_t extended_config_type = 0U;
+ 
+-	if (msg->in_size != sizeof(*in_args)) {
++	/*
++	 * Agents that implement clock protocol v1/v2 send this message without
++	 * extended_config_val (8 bytes instead of 12); accept both.
++	 */
++	if ((msg->in_size != sizeof(*in_args)) &&
++	    (msg->in_size != offsetof(struct scmi_clock_config_set_a2p,
++				      extended_config_val))) {
+ 		scmi_status_response(msg, SCMI_PROTOCOL_ERROR);
+ 		return;
+ 	}
+@@ -492,6 +499,12 @@ static void scmi_clock_config_set(struct scmi_msg *msg)
+ 
+ 	extended_config_type = in_args->attributes & SCMI_CLOCK_EXTENDED_CONFIG_SET_TYPE_MASK;
+ 
++	/* The short (v1/v2) message has no extended_config_val to apply. */
++	if ((extended_config_type != 0U) && (msg->in_size != sizeof(*in_args))) {
++		scmi_status_response(msg, SCMI_INVALID_PARAMETERS);
++		return;
++	}
++
+ 	if ((extended_config_type == 0U)
+ 	    && (enable == SCMI_CLOCK_CONFIG_SET_UNCHANGED_STATE)) {
+ 		scmi_status_response(msg, SCMI_INVALID_PARAMETERS);

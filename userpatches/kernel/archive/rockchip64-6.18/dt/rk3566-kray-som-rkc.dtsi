@@ -524,6 +524,15 @@
 	status = "okay";
 };
 
+/*
+ * The decoder keeps its row buffers in SYSTEM_SRAM. With the open-source
+ * TF-A BL31 that SRAM stays secure-only and the first access is a fatal
+ * SError, so let the driver use DMA memory instead.
+ */
+&vdec {
+	/delete-property/ sram;
+};
+
 &vop {
 	assigned-clocks = <&cru DCLK_VOP0>, <&cru DCLK_VOP1>;
 	assigned-clock-parents = <&pmucru PLL_HPLL>, <&cru PLL_VPLL>;

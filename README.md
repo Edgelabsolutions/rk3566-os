@@ -69,6 +69,8 @@ The script:
 
 The image lands in `armbian-build/output/images/`. Extra Armbian options are passed through; for the mainline kernel run `./build.sh BRANCH=current`.
 
+The boot firmware uses the open-source TF-A instead of Rockchip's closed BL31; `./build.sh KRAY_OPEN_TFA=no` switches back. See [docs/security.md](docs/security.md#open-source-tf-a).
+
 `./build.sh KRAY_DEMO=yes` builds the **exhibition demo image** (vendor): it boots straight into a full-screen demo with the IMX219 camera on HDMI, people detection on the NPU and live CPU/NPU load, with a read-only root file system. See [docs/demo.md](docs/demo.md).
 
 The RKNN SDK files are distributed under the Rockchip license, so they are not stored in this repository and are downloaded at build time.
@@ -152,6 +154,7 @@ userpatches/
   camera/<driver>/                         camera drivers from Raspberry Pi's kernel, adapted for Rockchip
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
   demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
+  atf/atf-kray-som-rkc/                    TF-A patch (docs/security.md)
   hardening/                               SSH, resolved, nftables, sysctl, udev, modprobe defaults; compiler flags (docs/security.md)
 ```
 

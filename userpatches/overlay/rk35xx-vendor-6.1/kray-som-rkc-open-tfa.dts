@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Kray-SoM-RKC: vendor kernel on the open-source TF-A BL31 (the default,
+ * see docs/security.md). The image enables it automatically; images built
+ * with Rockchip's BL31 (KRAY_OPEN_TFA=no) do not need it.
+ *
+ *   /boot/armbianEnv.txt:  overlays=kray-som-rkc-open-tfa
+ *
+ * - DDR frequency scaling (dmc) needs Rockchip's DRAM SiP calls, which TF-A
+ *   does not implement: DDR stays at the rate the DDR init set.
+ * - The video decoder keeps its row buffers (RCB) in SYSTEM_SRAM, which
+ *   stays secure-only with TF-A, so decoding times out. A zero RCB size
+ *   makes the driver skip SRAM; the buffers then live in DDR.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path = "/dmc";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	fragment@1 {
+		target-path = "/rkvdec@fdf80200";
+		__overlay__ {
+			rockchip,rcb-iova = <0x10000000 0x0>;
+		};
+	};
+};
