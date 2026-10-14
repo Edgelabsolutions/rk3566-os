@@ -137,6 +137,7 @@ scripts/build-multimedia.sh                Rockchip MPP/RGA/FFmpeg/GStreamer .de
 scripts/fetch-hailo.sh                     Hailo-8 driver sources + firmware (4.24.0)
 scripts/build-hailort.sh                   HailoRT .deb (libhailort, hailortcli)
 scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
+scripts/check-hardening.sh                 checks binaries for stack protector, RELRO, PIE (docs/security.md)
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
 docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
 userpatches/
@@ -151,7 +152,7 @@ userpatches/
   camera/<driver>/                         camera drivers from Raspberry Pi's kernel, adapted for Rockchip
   board-check/kray-board-check             hardware smoke test, installed as /usr/bin/kray-board-check
   demo/                                    exhibition demo: kray-demo sources, service, settings (KRAY_DEMO=yes)
-  hardening/                               SSH, resolved, nftables, sysctl and udev defaults (docs/security.md)
+  hardening/                               SSH, resolved, nftables, sysctl, udev, modprobe defaults; compiler flags (docs/security.md)
 ```
 
 ## Technical notes

@@ -19,12 +19,14 @@ STAGE="${WORK}/stage"
 TRIPLET=aarch64-linux-gnu
 LIBDIR="lib/${TRIPLET}"
 JOBS="$(nproc)"
+# shellcheck source=../userpatches/hardening/build-flags.sh
+. "${ROOT}/userpatches/hardening/build-flags.sh"
 
 # Pinned sources: repository, branch, commit.
-MPP_REPO=https://github.com/nyanmisaka/mpp;                MPP_BRANCH=jellyfin-mpp;        MPP_COMMIT=a9380ef
-RGA_REPO=https://github.com/nyanmisaka/rk-mirrors;         RGA_BRANCH=jellyfin-rga;        RGA_COMMIT=1d330cc
-FFMPEG_REPO=https://github.com/nyanmisaka/ffmpeg-rockchip; FFMPEG_BRANCH=master;           FFMPEG_COMMIT=d90e3a1
-GST_REPO=https://github.com/JeffyCN/mirrors;               GST_BRANCH=gstreamer-rockchip;  GST_COMMIT=a0d45af
+MPP_REPO=https://github.com/nyanmisaka/mpp;                MPP_BRANCH=jellyfin-mpp;        MPP_COMMIT=a9380ef333102ac318628f83b5f7a460d377749e
+RGA_REPO=https://github.com/nyanmisaka/rk-mirrors;         RGA_BRANCH=jellyfin-rga;        RGA_COMMIT=1d330cc28551943bed3380261a5a9c6fbd58ff53
+FFMPEG_REPO=https://github.com/nyanmisaka/ffmpeg-rockchip; FFMPEG_BRANCH=master;           FFMPEG_COMMIT=d90e3a1c18d7929383cf88c1b3da2e2d1c966cbf
+GST_REPO=https://github.com/JeffyCN/mirrors;               GST_BRANCH=gstreamer-rockchip;  GST_COMMIT=a0d45af504099b4b82f3d3377019a63d357e7cef
 
 PKG_VERSION="${PKG_VERSION:-1.0~kray1}"
 
@@ -37,6 +39,7 @@ fetch() { # name repo branch commit
 		git -c advice.detachedHead=false clone -q --branch "$3" "$2" "${dir}"
 	fi
 	git -C "${dir}" -c advice.detachedHead=false checkout -q "$4"
+	[[ "$(git -C "${dir}" rev-parse HEAD)" == "$4" ]] || { echo "$1: unexpected commit" >&2; exit 1; }
 }
 
 make_sysroot() {
@@ -45,6 +48,12 @@ make_sysroot() {
 	mmdebstrap --quiet --architectures=arm64 --variant=minbase \
 		--include=libc6-dev,libdrm-dev,libgstreamer1.0-dev,libgstreamer-plugins-base1.0-dev,libglib2.0-dev \
 		trixie "${SYSROOT}" http://deb.debian.org/debian
+}
+
+meson_list() { # words -> 'a', 'b', ...
+	local out="" w
+	for w in "$@"; do out+="${out:+, }'${w}'"; done
+	echo "${out}"
 }
 
 write_cross_files() {
@@ -57,6 +66,11 @@ write_cross_files() {
 		set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 		set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 		set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+		set(CMAKE_C_FLAGS_INIT "${KRAY_HARDEN_LIB_CFLAGS}")
+		set(CMAKE_CXX_FLAGS_INIT "${KRAY_HARDEN_LIB_CFLAGS}")
+		set(CMAKE_SHARED_LINKER_FLAGS_INIT "${KRAY_HARDEN_LIB_LDFLAGS}")
+		set(CMAKE_EXE_LINKER_FLAGS_INIT "${KRAY_HARDEN_LDFLAGS}")
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 	EOF
 	cat > "${WORK}/cross.ini" <<-EOF
 		[binaries]
@@ -67,10 +81,10 @@ write_cross_files() {
 		pkg-config = 'pkg-config'
 
 		[built-in options]
-		c_args = ['--sysroot=${SYSROOT}']
-		cpp_args = ['--sysroot=${SYSROOT}']
-		c_link_args = ['--sysroot=${SYSROOT}']
-		cpp_link_args = ['--sysroot=${SYSROOT}']
+		c_args = ['--sysroot=${SYSROOT}', $(meson_list ${KRAY_HARDEN_LIB_CFLAGS})]
+		cpp_args = ['--sysroot=${SYSROOT}', $(meson_list ${KRAY_HARDEN_LIB_CFLAGS})]
+		c_link_args = ['--sysroot=${SYSROOT}', $(meson_list ${KRAY_HARDEN_LIB_LDFLAGS})]
+		cpp_link_args = ['--sysroot=${SYSROOT}', $(meson_list ${KRAY_HARDEN_LIB_LDFLAGS})]
 
 		[properties]
 		sys_root = '${SYSROOT}'
@@ -99,6 +113,8 @@ install_twice() { # component, then the install command using $DESTDIR
 build_mpp() {
 	log "Building MPP"
 	local b="${WORK}/build/mpp"
+	# Fresh build dir: CMake only applies the toolchain's *_FLAGS_INIT once.
+	rm -rf "${b}"
 	cmake -S "${WORK}/src/mpp" -B "${b}" -G Ninja \
 		-DCMAKE_TOOLCHAIN_FILE="${WORK}/toolchain.cmake" \
 		-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
@@ -112,7 +128,7 @@ build_rga() {
 	local b="${WORK}/build/rga"
 	meson setup --wipe "${b}" "${WORK}/src/rga" --cross-file "${WORK}/cross.ini" \
 		--prefix=/usr --libdir="${LIBDIR}" --buildtype=release \
-		-Dcpp_args="--sysroot=${SYSROOT} -fpermissive" -Dlibdrm=false -Dlibrga_demo=false >/dev/null
+		-Dcpp_args="--sysroot=${SYSROOT} ${KRAY_HARDEN_LIB_CFLAGS} -fpermissive" -Dlibdrm=false -Dlibrga_demo=false >/dev/null
 	ninja -C "${b}" -j "${JOBS}" >/dev/null
 	install_twice rga meson install -C "${b}" --no-rebuild --quiet
 }
@@ -125,7 +141,8 @@ build_ffmpeg() {
 		--prefix=/usr/local --enable-cross-compile --cross-prefix="${TRIPLET}-" \
 		--arch=aarch64 --target-os=linux --sysroot="${SYSROOT}" --pkg-config=pkg-config \
 		--enable-gpl --enable-version3 --enable-libdrm --enable-rkmpp --enable-rkrga \
-		--enable-static --disable-shared --disable-doc --disable-debug --disable-ffplay >/dev/null)
+		--enable-static --disable-shared --disable-doc --disable-debug --disable-ffplay \
+		--extra-cflags="${KRAY_HARDEN_CFLAGS}" --extra-ldflags="${KRAY_HARDEN_LDFLAGS}" >/dev/null)
 	make -C "${b}" -j "${JOBS}" >/dev/null
 	rm -rf "${STAGE}/ffmpeg"
 	mkdir -p "${STAGE}/ffmpeg/usr/local/bin"

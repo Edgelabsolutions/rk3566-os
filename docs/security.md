@@ -96,6 +96,39 @@ These modules are blocked in `/etc/modprobe.d/kray-blacklist.conf`: `sctp`, `n_h
 
 `/dev/rk_cec` (HDMI CEC, vendor kernel) is set to mode 0660, group `video`; by default it is world-writable. Add users that need it to the `video` group.
 
+## Build
+
+**Compiler flags.** Everything this repository compiles for the board is built with the flags in [userpatches/hardening/build-flags.sh](../userpatches/hardening/build-flags.sh):
+
+```
+-O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -fPIE -mbranch-protection=standard
+-pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack
+```
+
+Libraries get the same flags with `-fPIC` and without `-pie`. This covers:
+- kray-cam-3a, kray-demo and npu_test;
+- the Rockchip MPP, RGA, FFmpeg and GStreamer packages;
+- HailoRT.
+
+`scripts/check-hardening.sh` checks ELF files, directories or `.deb` packages for a stack protector, full RELRO, PIE and a non-executable stack:
+```bash
+scripts/check-hardening.sh userpatches/multimedia/*.deb userpatches/hailo/*.deb userpatches/demo/kray-demo
+```
+
+**Pinned sources.** Every download is pinned to a commit or a SHA-256. A build stops if what it downloaded does not match.
+
+| Source | Pinned by |
+|---|---|
+| armbian/build v26.5.1 | commit, checked after cloning (`build.sh`) |
+| Vendor kernel rk-6.1-rkr7.2 | `KERNELBRANCH="commit:…"` in the board config |
+| MPP, RGA, FFmpeg, gstreamer-rockchip | full commit hashes (`scripts/build-multimedia.sh`) |
+| HailoRT and driver 4.24.0; Hailo-8 firmware | commits; SHA-256 (`scripts/fetch-hailo.sh`) |
+| rknn-toolkit2 and rknn_model_zoo v2.3.2 | commits, checked after cloning |
+| libdrm .deb, uv, YOLOv8n ONNX, stb | SHA-256 or commit (`scripts/build-demo.sh`) |
+| Python packages for the model conversion | `scripts/demo-requirements.txt`, installed with `--require-hashes` |
+
+To move to a new version, change the version and its hash together. For the Python packages, edit `scripts/demo-requirements.in` and regenerate the lock file with the command at the top of that file.
+
 ## Updates
 
 Images are built with the Debian packages that are current at build time. Nothing is updated automatically. Run `apt update && apt upgrade` for Debian security fixes; see [System updates](../README.md#system-updates) for the kernel packages, which are held.

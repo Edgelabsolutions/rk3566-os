@@ -5,11 +5,14 @@
 # they are downloaded at build time instead of being stored in this repository.
 set -euo pipefail
 
-RKNN_TAG="${RKNN_TAG:-v2.3.2}"
+RKNN_TAG="v2.3.2"
+RKNN_COMMIT="42aa1d426c0a9e0869b6374edba009f7208a1926"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NPU="${ROOT}/userpatches/npu"
 CACHE="${ROOT}/.cache/rknn-toolkit2-${RKNN_TAG}"
 CC="${CROSS_COMPILE:-aarch64-linux-gnu-}gcc"
+# shellcheck source=../userpatches/hardening/build-flags.sh
+. "${ROOT}/userpatches/hardening/build-flags.sh"
 
 if [[ ! -d "${CACHE}/rknpu2" ]]; then
 	echo "==> Fetching rknn-toolkit2 ${RKNN_TAG}"
@@ -21,6 +24,8 @@ if [[ ! -d "${CACHE}/rknpu2" ]]; then
 		rknpu2/examples/rknn_mobilenet_demo/model \
 		rknpu2/examples/3rdparty/stb
 fi
+[[ "$(git -C "${CACHE}" rev-parse HEAD)" == "${RKNN_COMMIT}" ]] ||
+	{ echo "rknn-toolkit2 ${RKNN_TAG}: unexpected commit" >&2; exit 1; }
 
 API="${CACHE}/rknpu2/runtime/Linux/librknn_api"
 DEMO="${CACHE}/rknpu2/examples/rknn_mobilenet_demo/model"
@@ -32,7 +37,8 @@ install -m 0644 "${API}"/include/*.h "${NPU}/include/"
 install -m 0644 "${DEMO}/RK3566_RK3568/mobilenet_v1.rknn" "${DEMO}"/*.jpg "${NPU}/npu-test/model/"
 
 echo "==> Cross-compiling npu_test with ${CC}"
-"${CC}" -O2 -Wall -o "${NPU}/npu-test/npu_test" "${NPU}/npu-test/npu_test.c" \
+# shellcheck disable=SC2086
+"${CC}" ${KRAY_HARDEN_CFLAGS} -Wall -o "${NPU}/npu-test/npu_test" "${NPU}/npu-test/npu_test.c" ${KRAY_HARDEN_LDFLAGS} \
 	-I"${API}/include" -I"${CACHE}/rknpu2/examples/3rdparty" \
 	-L"${API}/aarch64" -lrknnrt -lm -Wl,-rpath,'$ORIGIN/lib'
 
