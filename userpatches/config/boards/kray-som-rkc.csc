@@ -33,6 +33,22 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 
 	declare -g UBOOT_TARGET_MAP="BL31=$RKBIN_DIR/$BL31_BLOB ROCKCHIP_TPL=$RKBIN_DIR/$DDR_BLOB;;u-boot-rockchip.bin"
 
+	# Open-source TF-A BL31 instead of Rockchip's closed one (docs/security.md);
+	# KRAY_OPEN_TFA=no goes back to rkbin's BL31. Pinned to a master commit: v2.15.0 lacks the
+	# RK3568 CPU idle fix (c5de281), without which idle cores never wake up.
+	# userpatches/atf/atf-kray-som-rkc adds SCMI clock compatibility with the
+	# vendor 6.1 kernel.
+	if [[ "${KRAY_OPEN_TFA:-yes}" == "yes" ]]; then
+		display_alert "$BOARD" "Using open-source TF-A BL31 instead of rkbin" "info"
+		declare -g ATF_COMPILE="yes"
+		declare -g ATFSOURCE="https://github.com/ARM-software/arm-trusted-firmware"
+		declare -g ATFDIR="arm-trusted-firmware"
+		declare -g ATFBRANCH="commit:510355478850fb9bb4b064554d3dc2416b8b4b96"
+		declare -g ATFPATCHDIR="atf-kray-som-rkc"
+		declare -g ATF_TARGET_MAP="PLAT=rk3568 bl31;;build/rk3568/release/bl31/bl31.elf:bl31.elf"
+		declare -g UBOOT_TARGET_MAP="BL31=bl31.elf ROCKCHIP_TPL=$RKBIN_DIR/$DDR_BLOB;;u-boot-rockchip.bin"
+	fi
+
 	unset uboot_custom_postprocess write_uboot_platform write_uboot_platform_mtd
 
 	function write_uboot_platform() {
@@ -193,7 +209,11 @@ function post_customize_image__kray_som_rkc_multimedia() {
 	display_alert "$BOARD" "Installing Rockchip MPP multimedia packages" "info"
 	mkdir -p "${SDCARD}/tmp/kray-multimedia"
 	cp "${src}"/*.deb "${SDCARD}/tmp/kray-multimedia/"
-	chroot_sdcard dpkg -i /tmp/kray-multimedia/*.deb
+	# Name the packages here (one dpkg call, they depend on each other): a
+	# glob in the chroot command would be expanded on the host, not in the image.
+	local debs=() deb
+	for deb in "${src}"/*.deb; do debs+=("/tmp/kray-multimedia/${deb##*/}"); done
+	chroot_sdcard dpkg -i "${debs[@]}"
 	rm -rf "${SDCARD}/tmp/kray-multimedia"
 	chroot_sdcard ldconfig
 }
@@ -377,7 +397,12 @@ function post_customize_image__kray_som_rkc_hailo() {
 	fi
 	mkdir -p "${SDCARD}/tmp/kray-hailo"
 	cp "${src}"/*.deb "${SDCARD}/tmp/kray-hailo/"
-	chroot_sdcard dpkg -i /tmp/kray-hailo/*.deb
+	# Name the packages here: a glob in the chroot command would be expanded
+	# on the host (with nullglob), not inside the image.
+	local deb
+	for deb in "${src}"/*.deb; do
+		chroot_sdcard dpkg -i "/tmp/kray-hailo/${deb##*/}"
+	done
 	rm -rf "${SDCARD}/tmp/kray-hailo"
 	chroot_sdcard ldconfig
 }
@@ -436,6 +461,25 @@ function post_customize_image__kray_som_rkc_hardening() {
 	chroot_sdcard systemctl enable nftables.service
 	# NFS clients keep NFSv4; NFSv3 needs: systemctl unmask --now rpcbind.socket rpcbind.service
 	chroot_sdcard systemctl mask rpcbind.service rpcbind.socket
+}
+
+# Open-source TF-A (default, see above): on the vendor kernel the overlay
+# that turns off what needs Rockchip's BL31 (DDR frequency scaling, the
+# decoder's SRAM buffers). Images with Rockchip's BL31 (KRAY_OPEN_TFA=no)
+# get a separate suffix.
+function user_config__kray_som_rkc_open_tfa() {
+	[[ "${KRAY_OPEN_TFA:-yes}" == "yes" ]] && return 0
+	EXTRA_IMAGE_SUFFIXES+=("_rockchip-bl31")
+}
+
+function post_customize_image__kray_som_rkc_open_tfa() {
+	[[ "${KRAY_OPEN_TFA:-yes}" == "yes" && "${BRANCH}" == "vendor" ]] || return 0
+	display_alert "$BOARD" "Enabling overlay kray-som-rkc-open-tfa" "info"
+	if grep -q '^overlays=' "${SDCARD}/boot/armbianEnv.txt"; then
+		sed -i '/^overlays=/s/$/ kray-som-rkc-open-tfa/' "${SDCARD}/boot/armbianEnv.txt"
+	else
+		echo "overlays=kray-som-rkc-open-tfa" >> "${SDCARD}/boot/armbianEnv.txt"
+	fi
 }
 
 # Exhibition demo image (KRAY_DEMO=yes, vendor only; see docs/demo.md): the

@@ -129,6 +129,33 @@ scripts/check-hardening.sh userpatches/multimedia/*.deb userpatches/hailo/*.deb 
 
 To move to a new version, change the version and its hash together. For the Python packages, edit `scripts/demo-requirements.in` and regenerate the lock file with the command at the top of that file.
 
+## Boot firmware
+
+The boot chain is:
+1. the RK3566 BootROM;
+2. Rockchip's DDR init (`rk3566_ddr_1056MHz_v1.21.bin`, closed);
+3. mainline U-Boot SPL;
+4. BL31 (Trusted Firmware-A, EL3);
+5. mainline U-Boot 2025.10.
+
+There is no OP-TEE. The DDR init is the only closed blob after the BootROM; it and Rockchip's BL31 (used with `KRAY_OPEN_TFA=no`) come from `armbian/rkbin` and are byte-identical to the ones Rockchip publishes in `rockchip-linux/rkbin`.
+
+### Open-source TF-A
+
+BL31 is the open-source [Trusted Firmware-A](https://github.com/ARM-software/arm-trusted-firmware), not Rockchip's closed `rk3568_bl31_v1.44.elf`. To build with Rockchip's BL31 instead, run `./build.sh KRAY_OPEN_TFA=no`; the image name then ends in `_rockchip-bl31`.
+
+- **Version.** TF-A is pinned to a `master` commit, because release v2.15.0 lacks the RK3568 CPU idle fix (c5de281): without it, idle cores never wake up.
+- **Patch.** [userpatches/atf/atf-kray-som-rkc/](../userpatches/atf/atf-kray-som-rkc/) lets TF-A accept the SCMI clock messages of the vendor 6.1 kernel. Without it, the NPU and GPU do not start.
+
+Tested on Kray-SoM-RKC with the vendor kernel: `kray-board-check` passes; NPU, video encode and decode, camera, Ethernet, NVMe, Wi-Fi, USB and the crypto engine work.
+
+What changes with the vendor kernel. The image turns these off with the overlay `kray-som-rkc-open-tfa`:
+- **DDR frequency scaling.** TF-A does not implement Rockchip's DRAM calls, so DDR stays at 1056 MHz. This costs no measurable power: at idle and about 36 °C, the board with its USB devices drew 4.67 W, against 4.71 W with Rockchip's BL31 scaling DDR down to 324 MHz.
+- **The video decoder's SRAM.** TF-A leaves SYSTEM_SRAM secure-only, so the decoder keeps its row buffers in DDR instead. Decoding speed is the same.
+- **Suspend to RAM** is not supported. The image does not use it.
+
+The mainline kernel uses only PSCI and SCMI, which TF-A implements. Its video decoder also keeps its row buffers in DDR, not in SYSTEM_SRAM (set in the board DTS); with SRAM it would hit a fatal SError on TF-A.
+
 ## Updates
 
 Images are built with the Debian packages that are current at build time. Nothing is updated automatically. Run `apt update && apt upgrade` for Debian security fixes; see [System updates](../README.md#system-updates) for the kernel packages, which are held.
