@@ -1,0 +1,45 @@
+From 647ad0db27ba5625111872ce69f78b2eaf26acb6 Mon Sep 17 00:00:00 2001
+From: Nicolas Dufresne <nicolas.dufresne@collabora.com>
+Date: Fri, 27 Jun 2025 10:06:34 -0400
+Subject: [PATCH] v4l2codecs: h265dec: Fail when frame cropping is needed while
+ using DMABuf
+
+It is not possible to do frame cropping when DMABuf caps feature is negotiated.
+The VideoInfo size is zero, resulting in empty destination buffers, and video
+convert library may not understand what the format actually is.
+
+Part-of: <https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/9315>
+---
+ .../sys/v4l2codecs/gstv4l2codech265dec.c         | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+index 1915ee8855a..533eddf5c38 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+@@ -501,10 +501,18 @@ gst_v4l2_codec_h265_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
+-  if (gst_video_is_dma_drm_caps (caps) && !has_videometa) {
+-    GST_ERROR_OBJECT (self,
+-        "DMABuf caps negotiated without the mandatory support of VideoMeta");
+-    return FALSE;
++  if (gst_video_is_dma_drm_caps (caps)) {
++    if (!has_videometa) {
++      GST_ERROR_OBJECT (self,
++          "DMABuf caps negotiated without the mandatory support of VideoMeta");
++      return FALSE;
++    }
++
++    if (self->need_crop) {
++      GST_ERROR_OBJECT (self,
++          "Frame cropping is not supported when DMABuf caps is negotiated.");
++      return FALSE;
++    }
+   }
+ 
+   /* Check if we can zero-copy buffers */
+-- 
+GitLab
+
