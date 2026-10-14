@@ -122,6 +122,14 @@ See [docs/vendor-npu-and-codecs.md](docs/vendor-npu-and-codecs.md) for NPU model
 
 **current** (mainline) images use the in-kernel V4L2 stateless decoders (hantro, rkvdec) through GStreamer `v4l2codecs` from Debian (`v4l2slh264dec`, `v4l2slh265dec`, `v4l2slvp9dec`, ...). Mainline has no H.264/H.265 encoder for RK3566.
 
+The decoders take about 3 ms per 1080p frame, but only if the next element accepts their buffers as they are, without a CPU copy. A copy from their uncached buffers takes about 20 ms per frame for H.264 and 190 ms for H.265.
+- **Use a sink that accepts `GstVideoMeta`:** `kmssink`, `waylandsink`, `glimagesink`, or `fakevideosink` for timing. `fakesink` makes GStreamer copy every frame, because the decoders deliver 1088-line buffers for 1080p.
+- **1080p H.265 is always copied in GStreamer 1.26.** `v4l2slh265dec` copies every frame of a stream with a cropping window, and 1080p H.265 is almost always coded as 1088 lines and cropped. That limits such streams to about 5 fps. Streams coded without a cropping window, for example 720p or 1920×1088, are not affected. H.264 is not affected either.
+
+```bash
+gst-launch-1.0 filesrc location=in.mp4 ! qtdemux ! h264parse ! v4l2slh264dec ! kmssink
+```
+
 ### System updates
 
 `apt upgrade` and `armbian-upgrade` are safe to use, with one exception: the kernel and DTB packages (`linux-image-<branch>-<family>`, `linux-dtb-<branch>-<family>`) are marked **hold** in the image. The official Armbian repository ships packages with the same names that do not contain `rk3566-kray-som-rkc.dtb` or this board's kernel options, so installing them would leave the board unbootable. Update the kernel by flashing a new release or by installing the `.deb` packages built from this repository.
