@@ -76,9 +76,12 @@ Both kernels are built with extra hardening (`custom_kernel_config__kray_som_rkc
   - `FORTIFY_SOURCE` checks `memcpy`/`strcpy` sizes;
   - slab free lists are hardened and randomised, the page allocator is shuffled, and slab caches are not merged;
   - new kernel allocations are zeroed (`INIT_ON_ALLOC_DEFAULT_ON`);
-  - the kernel stack offset is randomised at each syscall;
   - `KFENCE` samples allocations for out-of-bounds and use-after-free errors;
-  - list corruption and stack-end checks are on.
+  - a stack-end check runs at every task switch.
+
+  Measured on the board against the kernel without these options: 0–3.5% slower on syscall-, scheduler- and fork-heavy micro benchmarks. NPU, hardware codecs, Ethernet and NVMe are not affected.
+- **Built in but off by default:** kernel stack offset randomisation at each syscall. Turn it on by adding `randomize_kstack_offset=on` to `extraargs=` in `/boot/armbianEnv.txt`. It makes syscalls about 7% slower.
+- **Left out:** list-corruption checks (`DEBUG_LIST`, `BUG_ON_DATA_CORRUPTION`), which made scheduler-heavy work 10–15% slower in 6.1, and LKDTM, a debugfs interface that crashes the kernel on request.
 - **Yama:** `ptrace` only works on a process's own descendants (`kernel.yama.ptrace_scope=1`). To attach a debugger to a running process, use `sudo`, or set the sysctl to 0.
 - **Landlock:** lets programs sandbox themselves.
 - **Removed:** code the board does not need, which had many security fixes upstream:

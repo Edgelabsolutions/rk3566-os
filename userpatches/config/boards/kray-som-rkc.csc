@@ -117,8 +117,10 @@ function custom_kernel_config__kray_som_rkc_no_phy_led_trigger() {
 
 # Kernel hardening (docs/security.md), for both kernels:
 # - memory-safety checks that cost little: usercopy bounds, FORTIFY_SOURCE,
-#   hardened and randomised slab free lists, zeroed allocations, KFENCE;
+#   hardened and randomised slab free lists, zeroed allocations, KFENCE
+#   (kernel stack offset randomisation is built in but off by default);
 # - Yama (ptrace limited to a process's own descendants) and Landlock;
+# - LKDTM (crashes the kernel on request through debugfs) off;
 # - code the board does not need removed: cluster and rarely used file
 #   systems, ksmbd, NVMe/SCSI targets and legacy network protocols. These
 #   were among the areas with the most CVEs fixed in 6.1.173-6.1.189.
@@ -127,12 +129,17 @@ function custom_kernel_config__kray_som_rkc_hardening() {
 	opts_y+=(
 		"HARDENED_USERCOPY" "FORTIFY_SOURCE"
 		"SLAB_FREELIST_HARDENED" "SLAB_FREELIST_RANDOM" "SHUFFLE_PAGE_ALLOCATOR"
-		"INIT_ON_ALLOC_DEFAULT_ON" "RANDOMIZE_KSTACK_OFFSET_DEFAULT"
-		"BUG_ON_DATA_CORRUPTION" "DEBUG_LIST" "SCHED_STACK_END_CHECK" "DEBUG_WX" "KFENCE"
+		"INIT_ON_ALLOC_DEFAULT_ON" "RANDOMIZE_KSTACK_OFFSET"
+		"SCHED_STACK_END_CHECK" "DEBUG_WX" "KFENCE"
 		"IO_STRICT_DEVMEM" "SECURITY_DMESG_RESTRICT" "SECURITY_YAMA" "SECURITY_LANDLOCK"
 	)
 	opts_n+=(
-		"SLAB_MERGE_DEFAULT"
+		# Measured on the board: kernel stack randomisation (about 7%) and the
+		# list checks (10-15%) slowed down syscall- and scheduler-heavy
+		# micro benchmarks. Kernel stack randomisation can still
+		# be switched on with randomize_kstack_offset=on in extraargs.
+		"RANDOMIZE_KSTACK_OFFSET_DEFAULT" "BUG_ON_DATA_CORRUPTION" "DEBUG_LIST"
+		"SLAB_MERGE_DEFAULT" "LKDTM"
 		"OCFS2_FS" "GFS2_FS" "DLM" "JFS_FS" "REISERFS_FS" "NILFS2_FS" "HFS_FS" "HFSPLUS_FS"
 		"NTFS_FS" "CEPH_FS" "ECRYPT_FS"
 		"SMB_SERVER" "NVME_TARGET" "TARGET_CORE"
