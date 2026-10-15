@@ -120,6 +120,7 @@ scripts/check-hardening.sh userpatches/multimedia/*.deb userpatches/hailo/*.deb 
 | Source | Pinned by |
 |---|---|
 | armbian/build v26.5.1 | commit, checked after cloning (`build.sh`) |
+| Rockchip DDR init (and BL31 with `KRAY_OPEN_TFA=no`) from `armbian/rkbin` master | SHA-256 of the files in `rockchip-linux/rkbin`, checked before U-Boot is built (board config) |
 | Vendor kernel rk-6.1-rkr7.2 | `KERNELBRANCH="commit:…"` in the board config |
 | MPP, RGA, FFmpeg, gstreamer-rockchip | full commit hashes (`scripts/build-multimedia.sh`) |
 | HailoRT and driver 4.24.0; Hailo-8 firmware | commits; SHA-256 (`scripts/fetch-hailo.sh`) |

@@ -56,6 +56,25 @@ function post_family_config__kray_som_rkc_use_mainline_uboot() {
 	}
 }
 
+# The rkbin blobs that go into u-boot-rockchip.bin come from the master
+# branch of armbian/rkbin. Check them against the files Rockchip published in
+# rockchip-linux/rkbin (DDR init v1.21: commit a8008bf; BL31 v1.44: commit
+# 4e90119), so a changed blob stops the build (docs/security.md).
+function pre_config_uboot_target__kray_som_rkc_pin_rkbin_blobs() {
+	local -A sums=(
+		["rk35/rk3566_ddr_1056MHz_v1.21.bin"]="8c9bf50c0d9220fecd13de06e0b69119c4e10efff83b061e3f09995995ffc8b6"
+		["rk35/rk3568_bl31_v1.44.elf"]="65110f822fdbdd0163ce2dabc60591e7a8a0ffbc9471780e29eef0062f9ed7b6"
+	)
+	local blobs=("${DDR_BLOB}") blob
+	[[ "${KRAY_OPEN_TFA:-yes}" == "yes" ]] || blobs+=("${BL31_BLOB}")
+	for blob in "${blobs[@]}"; do
+		[[ -n "${sums[${blob}]:-}" ]] || exit_with_error "No pinned SHA-256 for rkbin blob ${blob}"
+		echo "${sums[${blob}]}  ${RKBIN_DIR}/${blob}" | sha256sum -c --quiet ||
+			exit_with_error "rkbin blob ${blob} does not match its pinned SHA-256"
+		display_alert "$BOARD" "rkbin blob ${blob} matches its pinned SHA-256" "info"
+	done
+}
+
 # Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
 # brought up to upstream stable 6.1.189 by
 # userpatches/kernel/rk35xx-vendor-6.1/9000-linux-stable-6.1.172-to-6.1.189.patch
