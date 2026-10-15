@@ -1,0 +1,39 @@
+From 9e4243441b018b272ab8de06b6fb01866cd4fdeb Mon Sep 17 00:00:00 2001
+From: Nicolas Dufresne <nicolas.dufresne@collabora.com>
+Date: Fri, 27 Jun 2025 10:00:37 -0400
+Subject: [PATCH] v4l2codecs: h265dec: Avoid cropping for zero top/left
+ alignments
+
+If the conformance window does not requires cropping the top or left of the
+window, we can use GstVideoMeta to crop in a zero-copy fashion. If a copy
+is needed, the frame copy can also handle it, and is a lot faster.
+
+Part-of: <https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/9315>
+---
+ .../sys/v4l2codecs/gstv4l2codech265dec.c               | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+index b2795e6545e..1915ee8855a 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+@@ -971,10 +971,12 @@ gst_v4l2_codec_h265_dec_new_sequence (GstH265Decoder * decoder,
+     self->crop_rect_x = sps->crop_rect_x;
+     self->crop_rect_y = sps->crop_rect_y;
+ 
+-    /* conformance_window_flag could be set but with zeroed
+-     * parameters so check if we really need to crop */
+-    self->need_crop |= self->crop_rect_width != sps->width;
+-    self->need_crop |= self->crop_rect_height != sps->height;
++    /*
++     * Conformance_window_flag could be set but with zeroed
++     * parameters so check if we really need to crop. We only need
++     * to crop if the x/y are not zero, otherwise it can be handled by
++     * GstVideoMeta in a zero-copy fashion.
++     */
+     self->need_crop |= self->crop_rect_x != 0;
+     self->need_crop |= self->crop_rect_y != 0;
+   }
+-- 
+GitLab
+

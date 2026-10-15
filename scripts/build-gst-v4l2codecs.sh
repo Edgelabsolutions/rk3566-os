@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Cross-compile GStreamer's v4l2codecs plugin (V4L2 stateless decoders:
 # v4l2slh264dec, v4l2slh265dec, ...) from Debian's gst-plugins-bad1.0 source,
-# with Debian's patches and ours from userpatches/gstreamer/, and package it
+# with Debian's patches and the upstream fixes in userpatches/gstreamer/, and package it
 # as userpatches/gstreamer/gstreamer1.0-v4l2codecs-kray_<version>_arm64.deb.
 #
 # Mainline images install it in place of the plugin from
-# gstreamer1.0-plugins-bad (dpkg-divert in the package scripts). Our patch
-# lets v4l2slh265dec hand over 1080p frames without a CPU copy (README,
+# gstreamer1.0-plugins-bad (dpkg-divert in the package scripts). The patches
+# are the upstream commits of GStreamer MR !9315 (in 1.26.4; Debian 13 has
+# 1.26.2): v4l2slh265dec hands over 1080p frames without a CPU copy (README,
 # "Hardware video codecs").
 set -euo pipefail
 
@@ -24,7 +25,7 @@ DEB_VERSION="1.26.2-3+deb13u3"
 UPSTREAM_VERSION="1.26.2"
 ORIG_SHA256="cb116bfc3722c2de53838899006cafdb3c7c0bc69cd769b33c992a8421a9d844"
 DEBIAN_SHA256="41ab743a36cba54ee6d9688f482c35397e5ac431752a1481d6a33afb6ab1cbf8"
-PKG_VERSION="${DEB_VERSION}+kray1"
+PKG_VERSION="${DEB_VERSION}+kray2"
 
 log() { echo "==> $*"; }
 
@@ -52,9 +53,10 @@ while read -r p; do
 	[[ -z "${p}" || "${p}" == \#* ]] && continue
 	patch -d "${SRC}" -p1 -s < "${SRC}/debian/patches/${p}"
 done < "${SRC}/debian/patches/series"
+# Upstream commits from the GStreamer monorepo: strip subprojects/gst-plugins-bad/.
 for p in "${OUT}"/*.patch; do
 	log "Applying ${p##*/}"
-	patch -d "${SRC}" -p1 -s < "${p}"
+	patch -d "${SRC}" -p3 -s < "${p}"
 done
 
 if [[ ! -f "${SYSROOT}/usr/include/gstreamer-1.0/gst/gst.h" ]]; then
@@ -125,10 +127,11 @@ cat > "${STAGE}/DEBIAN/control" <<-CTL
 	Depends: gstreamer1.0-plugins-bad (>= ${UPSTREAM_VERSION}), gstreamer1.0-plugins-bad (<< 1.27), libgstreamer-plugins-bad1.0-0 (>= ${UPSTREAM_VERSION}), libgstreamer-plugins-bad1.0-0 (<< 1.27)
 	Section: video
 	Priority: optional
-	Description: GStreamer V4L2 stateless decoders, patched for zero-copy 1080p H.265
-	 The v4l2codecs plugin of gst-plugins-bad1.0 ${DEB_VERSION} with a patch
-	 that hands over right/bottom-cropped H.265 frames (1080p) without a CPU
-	 copy. Replaces the plugin of gstreamer1.0-plugins-bad through dpkg-divert.
+	Description: GStreamer V4L2 stateless decoders with the 1.26.4 zero-copy fix
+	 The v4l2codecs plugin of gst-plugins-bad1.0 ${DEB_VERSION} with the
+	 upstream fix from GStreamer 1.26.4 (MR !9315): right/bottom-cropped H.265
+	 frames (1080p) are handed over without a CPU copy. Replaces the plugin of
+	 gstreamer1.0-plugins-bad through dpkg-divert.
 	 Built by rk3566-os scripts/build-gst-v4l2codecs.sh.
 CTL
 cat > "${STAGE}/DEBIAN/preinst" <<-SH

@@ -1,0 +1,393 @@
+From 3ace98f030e0e6fb8c5e408ce506f173b6183216 Mon Sep 17 00:00:00 2001
+From: Nicolas Dufresne <nicolas.dufresne@collabora.com>
+Date: Fri, 27 Jun 2025 09:37:06 -0400
+Subject: [PATCH] v4l2codecs: dec: Move copy_frames logic inside
+ decide_allocation
+
+Part-of: <https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/9315>
+---
+ .../sys/v4l2codecs/gstv4l2codecav1dec.c       | 44 +++++++++---------
+ .../sys/v4l2codecs/gstv4l2codech264dec.c      | 44 +++++++++---------
+ .../sys/v4l2codecs/gstv4l2codech265dec.c      | 44 +++++++++---------
+ .../sys/v4l2codecs/gstv4l2codecmpeg2dec.c     | 44 +++++++++---------
+ .../sys/v4l2codecs/gstv4l2codecvp8dec.c       | 46 ++++++++++---------
+ .../sys/v4l2codecs/gstv4l2codecvp9dec.c       | 44 +++++++++---------
+ 6 files changed, 134 insertions(+), 132 deletions(-)
+
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecav1dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecav1dec.c
+index 86cb7a74912..290bfb83cf3 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecav1dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecav1dec.c
+@@ -433,6 +433,28 @@ gst_v4l2_codec_av1_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->render_width,
++        self->render_height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = FALSE;
++  }
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -1166,28 +1188,6 @@ gst_v4l2_codec_av1_dec_new_picture (GstAV1Decoder * decoder,
+       GST_ERROR_OBJECT (self, "Failed to negotiate with downstream");
+       return GST_FLOW_ERROR;
+     }
+-
+-    /* Check if we can zero-copy buffers */
+-    if (!self->has_videometa) {
+-      GstVideoInfo ref_vinfo;
+-      gint i;
+-
+-      gst_video_info_set_format (&ref_vinfo,
+-          GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->render_width,
+-          self->render_height);
+-
+-      for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-        if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-            self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-          GST_WARNING_OBJECT (self,
+-              "GstVideoMeta support required, copying frames.");
+-          self->copy_frames = TRUE;
+-          break;
+-        }
+-      }
+-    } else {
+-      self->copy_frames = FALSE;
+-    }
+   }
+ 
+   /*
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech264dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech264dec.c
+index 5dcfc0e3c92..9dd851ab671 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech264dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech264dec.c
+@@ -479,6 +479,28 @@ gst_v4l2_codec_h264_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->display_width,
++        self->display_height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = FALSE;
++  }
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -968,28 +990,6 @@ gst_v4l2_codec_h264_dec_new_sequence (GstH264Decoder * decoder,
+     }
+   }
+ 
+-  /* Check if we can zero-copy buffers */
+-  if (!self->has_videometa) {
+-    GstVideoInfo ref_vinfo;
+-    gint i;
+-
+-    gst_video_info_set_format (&ref_vinfo,
+-        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->display_width,
+-        self->display_height);
+-
+-    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-        GST_WARNING_OBJECT (self,
+-            "GstVideoMeta support required, copying frames.");
+-        self->copy_frames = TRUE;
+-        break;
+-      }
+-    }
+-  } else {
+-    self->copy_frames = FALSE;
+-  }
+-
+   return GST_FLOW_OK;
+ }
+ 
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+index 72ca7949397..867bdf2c68b 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codech265dec.c
+@@ -507,6 +507,28 @@ gst_v4l2_codec_h265_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->display_width,
++        self->display_height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = self->need_crop;
++  }
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -993,28 +1015,6 @@ gst_v4l2_codec_h265_dec_new_sequence (GstH265Decoder * decoder,
+     }
+   }
+ 
+-  /* Check if we can zero-copy buffers */
+-  if (!self->has_videometa) {
+-    GstVideoInfo ref_vinfo;
+-    gint i;
+-
+-    gst_video_info_set_format (&ref_vinfo,
+-        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->display_width,
+-        self->display_height);
+-
+-    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-        GST_WARNING_OBJECT (self,
+-            "GstVideoMeta support required, copying frames.");
+-        self->copy_frames = TRUE;
+-        break;
+-      }
+-    }
+-  } else {
+-    self->copy_frames = self->need_crop;
+-  }
+-
+   return GST_FLOW_OK;
+ }
+ 
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecmpeg2dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecmpeg2dec.c
+index 1449cd30534..b6585228a86 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecmpeg2dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecmpeg2dec.c
+@@ -401,6 +401,28 @@ gst_v4l2_codec_mpeg2_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
++        self->height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = FALSE;
++  }
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -529,28 +551,6 @@ gst_v4l2_codec_mpeg2_dec_new_sequence (GstMpeg2Decoder * decoder,
+     self->need_quantiser = TRUE;
+   }
+ 
+-  /* Check if we can zero-copy buffers */
+-  if (!self->has_videometa) {
+-    GstVideoInfo ref_vinfo;
+-    gint i;
+-
+-    gst_video_info_set_format (&ref_vinfo,
+-        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
+-        self->height);
+-
+-    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-        GST_WARNING_OBJECT (self,
+-            "GstVideoMeta support required, copying frames.");
+-        self->copy_frames = TRUE;
+-        break;
+-      }
+-    }
+-  } else {
+-    self->copy_frames = FALSE;
+-  }
+-
+   return GST_FLOW_OK;
+ }
+ 
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp8dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp8dec.c
+index db7d544c8e2..433c1d2bf42 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp8dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp8dec.c
+@@ -360,6 +360,30 @@ gst_v4l2_codec_vp8_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
++        self->height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = FALSE;
++  }
++
++
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -563,28 +587,6 @@ gst_v4l2_codec_vp8_dec_new_sequence (GstVp8Decoder * decoder,
+     }
+   }
+ 
+-  /* Check if we can zero-copy buffers */
+-  if (!self->has_videometa) {
+-    GstVideoInfo ref_vinfo;
+-    gint i;
+-
+-    gst_video_info_set_format (&ref_vinfo,
+-        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
+-        self->height);
+-
+-    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-        GST_WARNING_OBJECT (self,
+-            "GstVideoMeta support required, copying frames.");
+-        self->copy_frames = TRUE;
+-        break;
+-      }
+-    }
+-  } else {
+-    self->copy_frames = FALSE;
+-  }
+-
+   return GST_FLOW_OK;
+ }
+ 
+diff --git a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp9dec.c b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp9dec.c
+index bb2195f183a..bec044715ac 100644
+--- a/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp9dec.c
++++ b/subprojects/gst-plugins-bad/sys/v4l2codecs/gstv4l2codecvp9dec.c
+@@ -630,6 +630,28 @@ gst_v4l2_codec_vp9_dec_decide_allocation (GstVideoDecoder * decoder,
+     return FALSE;
+   }
+ 
++  /* Check if we can zero-copy buffers */
++  if (!self->has_videometa) {
++    GstVideoInfo ref_vinfo;
++    gint i;
++
++    gst_video_info_set_format (&ref_vinfo,
++        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
++        self->height);
++
++    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
++      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
++          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
++        GST_WARNING_OBJECT (self,
++            "GstVideoMeta support required, copying frames.");
++        self->copy_frames = TRUE;
++        break;
++      }
++    }
++  } else {
++    self->copy_frames = FALSE;
++  }
++
+   if (gst_query_get_n_allocation_pools (query) > 0)
+     gst_query_parse_nth_allocation_pool (query, 0, NULL, NULL, &min, NULL);
+ 
+@@ -775,28 +797,6 @@ gst_v4l2_codec_vp9_dec_new_sequence (GstVp9Decoder * decoder,
+     }
+   }
+ 
+-  /* Check if we can zero-copy buffers */
+-  if (!self->has_videometa) {
+-    GstVideoInfo ref_vinfo;
+-    gint i;
+-
+-    gst_video_info_set_format (&ref_vinfo,
+-        GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->width,
+-        self->height);
+-
+-    for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&self->vinfo_drm.vinfo); i++) {
+-      if (self->vinfo_drm.vinfo.stride[i] != ref_vinfo.stride[i] ||
+-          self->vinfo_drm.vinfo.offset[i] != ref_vinfo.offset[i]) {
+-        GST_WARNING_OBJECT (self,
+-            "GstVideoMeta support required, copying frames.");
+-        self->copy_frames = TRUE;
+-        break;
+-      }
+-    }
+-  } else {
+-    self->copy_frames = FALSE;
+-  }
+-
+   return GST_FLOW_OK;
+ }
+ 
+-- 
+GitLab
+
