@@ -17,6 +17,8 @@
 // kray-cam-lsc (/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf), and
 // with every white balance change it sets a colour correction matrix for
 // the light's colour temperature (/etc/kray-cam-3a/ccm-<sensor>.conf).
+// Noise reduction (colour and luma) and sharpening follow the sensor gain
+// (/etc/kray-cam-3a/nr-<sensor>.conf, made by scripts/gen-isp21-nr.py).
 //
 // Settings: /etc/kray-cam-3a.conf (key = value, see the shipped file).
 #include <algorithm>
@@ -25,6 +27,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -32,6 +35,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <glob.h>
+#include <map>
 #include <poll.h>
 #include <sstream>
 #include <string>
@@ -43,6 +47,10 @@
 #include <linux/v4l2-subdev.h>
 #include <linux/videodev2.h>
 
+// The ISP21 header uses the kernel's BIT_ULL for the ISP21-only module bits.
+#ifndef BIT_ULL
+#define BIT_ULL(n) (1ULL << (n))
+#endif
 #include <linux/rk-isp21-config.h>
 
 #ifndef CIFISP_V4L2_EVENT_STREAM_START
@@ -84,6 +92,8 @@ struct Config {
 	std::string lsc_dir = "/etc/kray-cam-3a";
 	bool ccm = true;            // colour correction, if there is a table
 	double saturation = 1.0;    // 0 = no colour correction, 1 = the table's matrix
+	bool denoise = true;        // colour and luma noise reduction, if there is a table
+	bool sharpen = true;        // sharpening, if there is a table
 	std::string sensor;         // sub-device name match; empty = first one with an exposure control
 };
 
@@ -123,6 +133,8 @@ static Config load_config(const char *path)
 		else if (k == "lsc_dir") c.lsc_dir = v;
 		else if (k == "ccm") c.ccm = yes();
 		else if (k == "saturation") c.saturation = std::clamp(atof(v.c_str()), 0.0, 2.0);
+		else if (k == "denoise") c.denoise = yes();
+		else if (k == "sharpen") c.sharpen = yes();
 	}
 	return c;
 }
@@ -631,6 +643,102 @@ struct CcmTable {
 	}
 };
 
+// ------------------------------------------- noise reduction / sharpening
+
+// Register values of the ISP's colour noise reduction (CNR), luma noise
+// reduction (YNR) and sharpening blocks for a grid of ISO values (ISO 50 =
+// sensor gain 1), one line per block and ISO: "cnr 400 = v0 v1 ...", the
+// fields of the kernel struct in declaration order.
+struct NrTable {
+	enum { CNR, YNR, SHARP, N };
+	std::map<int, std::vector<long>> rows[N];
+
+	// Field sizes in bytes of isp21_cnr_cfg, isp21_ynr_cfg, isp21_sharp_cfg.
+	static const std::vector<int> &widths(int b)
+	{
+		static const std::vector<int> w[N] = {
+			expand({{1, 19}, {2, 5}}),
+			expand({{1, 9}, {2, 12}, {1, 5}, {2, 6}, {1, 8}, {2, 51}, {1, 17}}),
+			expand({{1, 12}, {2, 16}, {1, 2}, {2, 16}, {1, 9}}),
+		};
+		return w[b];
+	}
+
+	static std::vector<int> expand(std::initializer_list<std::pair<int, int>> runs)
+	{
+		std::vector<int> v;
+		for (auto &r : runs)
+			v.insert(v.end(), r.second, r.first);
+		return v;
+	}
+
+	bool load(const std::string &path)
+	{
+		std::ifstream f(path);
+		if (!f)
+			return false;
+		static const char *const names[N] = {"cnr", "ynr", "sharp"};
+		std::string line;
+		while (std::getline(f, line)) {
+			size_t h = line.find('#');
+			if (h != std::string::npos)
+				line.erase(h);
+			size_t eq = line.find('=');
+			if (eq == std::string::npos)
+				continue;
+			std::istringstream ks(line.substr(0, eq)), vs(line.substr(eq + 1));
+			std::string k;
+			int iso = 0;
+			ks >> k >> iso;
+			for (int b = 0; b < N; b++) {
+				if (k != names[b] || iso <= 0)
+					continue;
+				std::vector<long> v;
+				for (long d; vs >> d;)
+					v.push_back(d);
+				if (v.size() != widths(b).size())
+					return false;
+				rows[b][iso] = v;
+			}
+		}
+		for (auto &r : rows)
+			if (r.empty())
+				return false;
+		return true;
+	}
+
+	// The ISO of the table nearest to iso (on a log scale).
+	int nearest(int b, double iso) const
+	{
+		int best = rows[b].begin()->first;
+		for (auto &r : rows[b])
+			if (std::fabs(std::log(r.first / iso)) < std::fabs(std::log(best / iso)))
+				best = r.first;
+		return best;
+	}
+
+	// Write a row into the packed kernel struct at dst (little-endian).
+	void put(int b, int iso, uint8_t *dst) const
+	{
+		const std::vector<long> &v = rows[b].at(iso);
+		const std::vector<int> &w = widths(b);
+		for (size_t i = 0; i < v.size(); i++) {
+			for (int k = 0; k < w[i]; k++)
+				*dst++ = uint8_t(v[i] >> (8 * k));
+		}
+	}
+};
+
+// YNR's radial term: 1 / (half the image diagonal)^2 as mantissa and
+// exponent (rkaiq ynr_fix_transfer_V2).
+static __u16 ynr_rnr_max_r(int width, int height)
+{
+	double l = std::log2(16.0 / (double(width) * width + double(height) * height));
+	int e = std::abs(int(std::ceil(l)));
+	int m = int(std::floor(std::pow(2.0, l + e) * 256 + 0.5));
+	return __u16(std::clamp((m << 5) + e, 0, 0x3fff));
+}
+
 // Rockchip sub-device naming "m00_b_imx219 1-0010": the sensor is "imx219".
 static std::string sensor_model(const std::string &subdev)
 {
@@ -680,6 +788,9 @@ private:
 	bool ccm_ = false;
 	CcmTable ccm_table_;
 	double ccm_ct_ = 0; // colour temperature of the matrix in use
+	bool nr_ = false;
+	NrTable nr_table_;
+	int nr_iso_ = 0;    // ISO of the noise reduction settings in use
 };
 
 void Engine::fill_params(void *buf, size_t size, bool first)
@@ -778,6 +889,45 @@ void Engine::fill_params(void *buf, size_t size, bool first)
 		for (int i = 0; i < ISP21_DHAZ_ENH_CURVE_NUM; i++)
 			cc.alp_y[i] = 1024;
 	}
+	if (nr_) {
+		// The driver declares the ISP21 parameter buffer with the size of
+		// the ISP20 struct (10418 bytes, the ISP21 one is 10475), so the
+		// sharpening block lies past it. The buffer is allocated in whole
+		// pages and mapped so, and the driver reads the full ISP21 struct.
+		const size_t mapped = (size + 4095) & ~size_t(4095);
+		uint8_t *base = static_cast<uint8_t *>(buf);
+		// The three blocks work as a set: with only some of them enabled
+		// the picture gets a colour cast and stripes (measured), so all
+		// three stay enabled, as rkaiq does, and switching one off is its
+		// bypass bits.
+		struct Block {
+			int table;
+			uint64_t module;
+			size_t off, len;
+		} blocks[] = {
+			{NrTable::CNR, ISP2X_MODULE_CNR, offsetof(isp21_isp_params_cfg, others.cnr_cfg), sizeof(isp21_cnr_cfg)},
+			{NrTable::YNR, ISP2X_MODULE_YNR, offsetof(isp21_isp_params_cfg, others.ynr_cfg), sizeof(isp21_ynr_cfg)},
+			{NrTable::SHARP, ISP2X_MODULE_SHARP, offsetof(isp21_isp_params_cfg, others.sharp_cfg), sizeof(isp21_sharp_cfg)},
+		};
+		if (offsetof(isp21_isp_params_cfg, others.sharp_cfg) + sizeof(isp21_sharp_cfg) <= mapped) {
+			for (const Block &b : blocks) {
+				nr_table_.put(b.table, nr_table_.nearest(b.table, nr_iso_), base + b.off);
+				p->module_en_update |= b.module;
+				p->module_ens |= b.module;
+				p->module_cfg_update |= b.module;
+			}
+			isp21_ynr_cfg &y = p->others.ynr_cfg;
+			y.sw_ynr_rnr_max_r = ynr_rnr_max_r(sensor_.width, sensor_.height);
+			if (!cfg_.denoise) {
+				isp21_cnr_cfg &c = p->others.cnr_cfg;
+				c.sw_cnr_lq_bila_bypass = c.sw_cnr_hq_bila_bypass = c.sw_cnr_exgain_bypass = 1;
+				y.sw_ynr_sft5x5_bypass = y.sw_ynr_flt1x1_bypass = y.sw_ynr_lgft3x3_bypass = 1;
+				y.sw_ynr_lbft5x5_bypass = y.sw_ynr_bft3x3_bypass = 1;
+			}
+			if (!cfg_.sharpen)
+				p->others.sharp_cfg.sw_sharp_bypass = 1;
+		}
+	}
 	sent_red_ = red_;
 	sent_blue_ = blue_;
 }
@@ -815,6 +965,18 @@ bool Engine::start()
 			LOG("ccm: %s (%zu matrices, saturation %.2f)\n", path.c_str(), ccm_table_.ccms.size(), cfg_.saturation);
 		else
 			LOG("ccm: no table %s\n", path.c_str());
+	}
+	nr_ = false;
+	if (cfg_.denoise || cfg_.sharpen) {
+		std::string path = cfg_.lsc_dir + "/nr-" + nm + ".conf";
+		nr_table_ = NrTable();
+		nr_ = nr_table_.load(path);
+		nr_iso_ = 50 * sensor_.factor(sensor_.gain);
+		if (nr_)
+			LOG("nr: %s (denoise %s, sharpen %s)\n", path.c_str(), cfg_.denoise ? "on" : "off",
+			    cfg_.sharpen ? "on" : "off");
+		else
+			LOG("nr: no table %s\n", path.c_str());
 	}
 	max_exp_ = cfg_.max_exposure > 0 ? std::min(cfg_.max_exposure, sensor_.exp_max) : sensor_.exp_max;
 	LOG("stream start: sensor \"%s\" %dx%d, exposure %d..%d, %s %d..%d%s\n", sensor_.name.c_str(),
@@ -898,6 +1060,15 @@ void Engine::auto_exposure(double level, double bright)
 		s.gain = gc;
 	DBG("ae: level %.3f (target %.3f, clip %.2f) -> exposure %d, gain %d (%.2fx)\n", level, cfg_.target,
 	    bright, s.exp, s.gain, s.factor(s.gain));
+	if (nr_) {
+		// Noise reduction follows the gain: ISO 50 = gain 1.
+		int iso = int(50 * s.factor(s.gain));
+		if (nr_table_.nearest(NrTable::YNR, iso) != nr_table_.nearest(NrTable::YNR, nr_iso_)) {
+			nr_iso_ = iso;
+			if (send_params(false))
+				DBG("nr: ISO %d\n", nr_table_.nearest(NrTable::YNR, iso));
+		}
+	}
 }
 
 void Engine::auto_wb(const isp2x_rawaebig_stat &ae)
