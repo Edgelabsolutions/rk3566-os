@@ -386,9 +386,10 @@ function custom_kernel_config__kray_som_rkc_camera_drivers() {
 }
 
 # Camera helpers for the vendor image:
-# - kray-cam-3a.service: auto exposure and white balance for the camera
-#   (docs/camera.md), built here with the cross compiler; the demo image
-#   keeps it off (kray-demo has its own);
+# - kray-cam-3a.service: auto exposure, white balance and lens shading
+#   correction for the camera (docs/camera.md), built here with the cross
+#   compiler; the demo image keeps it off (kray-demo has its own);
+# - kray-cam-lsc makes a lens shading table (the IMX219 one is shipped);
 # - kray-hdmi-in-edid.service loads an EDID that fits two CSI-2 lanes when
 #   the 2-lane TC358743 overlay is enabled (it does nothing without one).
 function post_customize_image__kray_som_rkc_camera_tools() {
@@ -407,6 +408,9 @@ function post_customize_image__kray_som_rkc_camera_tools() {
 		"${cxx%g++}strip" "${SDCARD}/usr/bin/kray-cam-3a"
 		install -D -m 0644 "${src}/kray-cam-3a/kray-cam-3a.conf" "${SDCARD}/etc/kray-cam-3a.conf"
 		install -D -m 0644 "${src}/kray-cam-3a/kray-cam-3a.service" "${SDCARD}/usr/lib/systemd/system/kray-cam-3a.service"
+		install -D -m 0644 "${src}/kray-cam-3a/lsc-imx219-3280x2464.conf" \
+			"${SDCARD}/etc/kray-cam-3a/lsc-imx219-3280x2464.conf"
+		install -D -m 0755 "${src}/kray-cam-lsc" "${SDCARD}/usr/bin/kray-cam-lsc"
 		[[ "${KRAY_DEMO:-no}" == "yes" ]] || chroot_sdcard systemctl enable kray-cam-3a.service
 	else
 		display_alert "$BOARD" "No ${cxx}: kray-cam-3a left out" "wrn"

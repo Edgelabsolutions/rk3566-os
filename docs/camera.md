@@ -188,11 +188,12 @@ The sensor starts in the 2028x1520 binned mode; the ISP scales to the size asked
 | 2028x1520 (default) | 2028x1520 | 30 fps (40 with a shorter vertical blanking) |
 | 4056x3040 | 2028x1520 | 10 fps |
 
-Switch the sensor mode before streaming:
+Switch the sensor mode before streaming, and set the ISP input to the same size (with the old size there the ISP reports `CIF_ISP_PIC_SIZE_ERROR` and delivers no frames):
 
 ```bash
 MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
 media-ctl -d $MD --set-v4l2 '"m00_b_imx477 1-001a":0[fmt:SRGGB12_1X12/4056x3040]'
+media-ctl -d $MD --set-v4l2 '"rkisp-isp-subdev":0[fmt:SRGGB12_1X12/4056x3040 crop:(0,0)/4056x3040]'
 ```
 
 The device numbers of `/dev/media*` and `/dev/video*` change when a USB camera is plugged in; the commands here find the ISP by name. The main path in the capture examples is `$(v4l2-ctl --list-devices | awk '/rkisp_mainpath/{getline; print $1; exit}')`.
@@ -209,9 +210,12 @@ The vendor `imx219` driver starts the sensor in the full 3280x2464 mode; the ISP
 ```bash
 MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
 media-ctl -d $MD --set-v4l2 '"m00_b_imx219 1-0010":0[fmt:SRGGB10_1X10/1920x1080]'
+media-ctl -d $MD --set-v4l2 '"rkisp-isp-subdev":0[fmt:SRGGB10_1X10/1920x1080 crop:(0,0)/1920x1080]'
 ```
 
-## Image quality: auto exposure and white balance
+Back to the full mode: the same two commands with `3280x2464`.
+
+## Image quality: auto exposure, white balance and lens shading
 
 On Rockchip SoCs auto exposure, auto white balance and the ISP's colour and noise tuning normally run in user space in Rockchip's `rkaiq`, with a tuning (IQ) file per sensor. The image does not include it: there is no tuning file for the Raspberry Pi sensors, and the `rkaiq` available for this kernel (AIQ v6.0x8.0) programmed the ISP once but did not run 3A on Kray-SoM-RKC.
 
@@ -219,16 +223,17 @@ Instead the vendor image runs `kray-cam-3a.service`, a small replacement for the
 
 - it takes `rkaiq`'s place in the ISP driver's protocol: when a program starts the camera, the ISP waits for its first parameters, which switch on the raw statistics (15x15 windows with mean R, G and B), black level subtraction and an output gamma;
 - **auto exposure**: sets the sensor's exposure, then its gain, to bring the mean level to a target;
-- **auto white balance** (grey world): sets the ISP's red and blue gains so that near-neutral areas come out grey.
+- **auto white balance** (grey world): sets the ISP's red and blue gains so that near-neutral areas come out grey;
+- **lens shading correction**: loads a gain table into the ISP that brightens the corners, which the lens leaves darker (see below).
 
-It works with any capture program (`v4l2-ctl`, GStreamer, OpenCV, your own); nothing has to be changed there. Settings are in `/etc/kray-cam-3a.conf` (target level, exposure and gain limits, fixed white balance, gamma); after a change:
+It works with any capture program (`v4l2-ctl`, GStreamer, OpenCV, your own); nothing has to be changed there. Settings are in `/etc/kray-cam-3a.conf` (target level, exposure and gain limits, fixed white balance, gamma, lens shading); after a change:
 
 ```bash
 sudo systemctl restart kray-cam-3a
 journalctl -u kray-cam-3a -f        # what it does; kray-cam-3a -v prints every step
 ```
 
-What it does not do: colour correction (CCM), lens shading correction (the corners of the picture are darker and slightly tinted), noise reduction and sharpening tuning stay at the ISP defaults, and there is no autofocus. With `kray-cam-3a` stopped (`sudo systemctl disable --now kray-cam-3a`) the ISP runs on its defaults and the sensor keeps the exposure and gain it is given; set them by hand:
+What it does not do: colour correction (CCM), noise reduction and sharpening tuning stay at the ISP defaults, and there is no autofocus. With `kray-cam-3a` stopped (`sudo systemctl disable --now kray-cam-3a`) the ISP runs on its defaults and the sensor keeps the exposure and gain it is given; set them by hand:
 
 ```bash
 MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
@@ -238,6 +243,29 @@ v4l2-ctl -d $SD --set-ctrl=exposure=1500,analogue_gain=600    # lines; gain regi
 ```
 
 For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 = 2x, 768 = 4x, 978 = about 22x); exposure is in lines (in 2028x1520 mode one line is about 20 us). For the IMX219 use only the `gain` control (256 = 1x): the vendor driver maps `gain` and `analogue_gain` to the same total gain (the one set last wins). Up to 2728 (10.66x) it is analogue gain; above that the driver adds digital gain, up to 43663. The sensor drivers reset exposure and gain when streaming starts, so set them while the camera streams.
+
+### Lens shading
+
+A lens leaves the corners of the picture darker than the centre: with the Raspberry Pi Camera v2 the corners get about a quarter of the light of the centre, the middle of the left and right edges about 40%. The ISP corrects this with a table of gains per colour on a 17 x 17 grid, and `kray-cam-3a` loads it when the camera starts:
+
+```
+kray-cam-3a: lsc: /etc/kray-cam-3a/lsc-imx219-3280x2464.conf
+```
+
+The image ships a table for the IMX219 (Raspberry Pi Camera v2). It raises the corners by up to 3x; a full correction would need about 4x, which brings up the noise too much. A table made for the sensor's full-size mode also serves its other modes: `kray-cam-3a` scales it for a mode with the same aspect ratio (binning) and cuts out the centre for any other (the IMX219 1920x1080 mode is a centre crop; the log then says `(centre crop of it)`). Without a table for the sensor nothing changes. To switch the correction off, set `lsc = 0` in `/etc/kray-cam-3a.conf`.
+
+For another camera module or lens, make a table with `kray-cam-lsc`:
+
+1. Put a diffuser on the lens: several layers of tracing paper or a piece of white translucent plastic, held flat against the lens, with even light in front (daylight from a window, not a lamp close by). The whole picture must be featureless; a white wall is not even enough.
+2. Keep the sensor in its full-size mode (the default) and run:
+   ```bash
+   sudo apt install python3-numpy     # once
+   sudo kray-cam-lsc --keep
+   ```
+   It stops `kray-cam-3a`, captures frames with a linear setup (no gamma, no white balance), fits a smooth surface to the shading per colour (specks of dust and small marks on the diffuser are left out) and writes `/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf`. Then it starts `kray-cam-3a` again; the next stream uses the table.
+3. Check it: run it twice, turning the diffuser between the runs. The gains should agree to a few hundredths; if they do not, the light on the diffuser is not even.
+
+`--max-gain` (default 3.0, up to 8) sets the largest correction; `--from FILE.npy` recomputes a table from a capture kept with `--keep`.
 
 ## Lens focus
 
@@ -312,4 +340,4 @@ The analogue input to use (the module's CVBS connector is usually AIN1) and brig
 - **Lens focus (Camera Module 3, Arducam 16 and 64 MP) and HDMI input (TC358743)**: drivers, overlays and the EDID service build; not yet tested with hardware.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above.
 
-Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219.
+Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219. Lens shading correction: tested with the IMX219 in the 3280x2464 and 1920x1080 modes (the corners come out 2.8-3x brighter, the centre unchanged).
