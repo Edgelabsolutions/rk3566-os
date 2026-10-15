@@ -13,6 +13,8 @@
 //     bring the mean green level to a target;
 //   - auto white balance (grey world): sets the ISP red and blue gains so
 //     that the near-neutral windows come out grey.
+// With the first parameters it also loads a lens shading table made by
+// kray-cam-lsc (/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf).
 //
 // Settings: /etc/kray-cam-3a.conf (key = value, see the shipped file).
 #include <algorithm>
@@ -27,7 +29,9 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <fstream>
+#include <glob.h>
 #include <poll.h>
+#include <sstream>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -74,6 +78,8 @@ struct Config {
 	double gamma = 2.2;         // ISP output gamma; 0 = leave the ISP's linear output
 	bool bls = true;            // subtract the black level in the ISP
 	int bls_value = -1;         // ISP black level value; -1 = from black_level
+	bool lsc = true;            // lens shading correction, if there is a table
+	std::string lsc_dir = "/etc/kray-cam-3a";
 	std::string sensor;         // sub-device name match; empty = first one with an exposure control
 };
 
@@ -109,6 +115,8 @@ static Config load_config(const char *path)
 		else if (k == "gamma") c.gamma = atof(v.c_str());
 		else if (k == "black_level_subtraction") c.bls = yes();
 		else if (k == "bls_value") c.bls_value = atoi(v.c_str());
+		else if (k == "lsc") c.lsc = yes();
+		else if (k == "lsc_dir") c.lsc_dir = v;
 	}
 	return c;
 }
@@ -354,6 +362,185 @@ struct Sensor {
 	}
 };
 
+// ------------------------------------------------------- lens shading table
+
+// The ISP's lens shading grid: 16 sectors per axis, given as 8 sizes for one
+// half of the image and mirrored; 17 x 17 gains per Bayer channel (R, Gr, Gb,
+// B), 1024 = 1.0.
+constexpr int LSC_N = 17;
+
+struct LscTable {
+	int width = 0, height = 0;
+	int x_sect[8] = {}, y_sect[8] = {};
+	double gain[4][LSC_N][LSC_N] = {};
+
+	bool load(const std::string &path)
+	{
+		std::ifstream f(path);
+		if (!f)
+			return false;
+		static const char *const names[4] = {"r", "gr", "gb", "b"};
+		unsigned rows[4] = {};
+		bool xs = false, ys = false;
+		std::string line;
+		while (std::getline(f, line)) {
+			size_t h = line.find('#');
+			if (h != std::string::npos)
+				line.erase(h);
+			size_t eq = line.find('=');
+			if (eq == std::string::npos)
+				continue;
+			std::istringstream ks(line.substr(0, eq)), vs(line.substr(eq + 1));
+			std::string k;
+			ks >> k;
+			std::vector<double> v;
+			for (double d; vs >> d;)
+				v.push_back(d);
+			if (k == "size" && v.size() == 2) {
+				width = int(v[0]);
+				height = int(v[1]);
+			} else if ((k == "x_sect" || k == "y_sect") && v.size() == 8) {
+				for (int i = 0; i < 8; i++)
+					(k[0] == 'x' ? x_sect : y_sect)[i] = int(v[i]);
+				(k[0] == 'x' ? xs : ys) = true;
+			} else {
+				for (int c = 0; c < 4; c++) {
+					size_t n = strlen(names[c]);
+					if (k.compare(0, n, names[c]) || k.size() == n || !isdigit(k[n]))
+						continue;
+					int row = atoi(k.c_str() + n);
+					if (row < 0 || row >= LSC_N || v.size() != LSC_N)
+						return false;
+					for (int i = 0; i < LSC_N; i++)
+						gain[c][row][i] = std::clamp(v[i] / 1024, 1.0 / 8, 8.0);
+					rows[c] |= 1u << row;
+				}
+			}
+		}
+		for (unsigned r : rows)
+			if (r != (1u << LSC_N) - 1)
+				return false;
+		// The 16 sectors must cover the image.
+		int sx = 0, sy = 0;
+		for (int i = 0; i < 8; i++) {
+			sx += 2 * x_sect[i];
+			sy += 2 * y_sect[i];
+		}
+		return width > 0 && height > 0 && xs && ys && sx == width && sy == height;
+	}
+
+	// Grid point positions in pixels.
+	static void points(const int sect[8], double pts[LSC_N])
+	{
+		pts[0] = 0;
+		for (int i = 0; i < 16; i++)
+			pts[i + 1] = pts[i] + sect[i < 8 ? i : 15 - i];
+	}
+
+	// Gain at a pixel position, bilinear between the grid points.
+	double at(int c, double x, double y) const
+	{
+		double px[LSC_N], py[LSC_N];
+		points(x_sect, px);
+		points(y_sect, py);
+		auto cell = [](const double *p, double v, int &i, double &t) {
+			v = std::clamp(v, p[0], p[LSC_N - 1]);
+			for (i = 0; i < LSC_N - 2 && v > p[i + 1]; i++)
+				;
+			t = (v - p[i]) / std::max(1.0, p[i + 1] - p[i]);
+		};
+		int i, j;
+		double tx, ty;
+		cell(px, x, i, tx);
+		cell(py, y, j, ty);
+		const auto &g = gain[c];
+		return (g[j][i] * (1 - tx) + g[j][i + 1] * tx) * (1 - ty) +
+		       (g[j + 1][i] * (1 - tx) + g[j + 1][i + 1] * tx) * ty;
+	}
+};
+
+// Equal sectors for one half of the image, as kray-cam-lsc makes them.
+static void lsc_sectors(int size, int sect[8])
+{
+	int half = size / 2;
+	for (int i = 0; i < 8; i++)
+		sect[i] = half / 8 + (i < half % 8 ? 1 : 0);
+}
+
+// The lens shading table for this sensor and size. A table made at this
+// size is used as it is. Otherwise the largest table for the sensor is
+// mapped onto the mode: a mode with the same aspect ratio is taken as
+// binned or scaled (the whole field of view), any other as a centre crop.
+static bool lsc_params(const Config &cfg, const std::string &sensor, int w, int h, isp2x_lsc_cfg &out)
+{
+	std::string prefix = cfg.lsc_dir + "/lsc-" + sensor + "-";
+	LscTable t;
+	std::string used = prefix + std::to_string(w) + "x" + std::to_string(h) + ".conf";
+	if (!t.load(used)) {
+		glob_t g{};
+		used.clear();
+		if (glob((prefix + "*x*.conf").c_str(), 0, nullptr, &g) == 0) {
+			LscTable c;
+			for (size_t i = 0; i < g.gl_pathc; i++)
+				if (c.load(g.gl_pathv[i]) && c.width * c.height > t.width * t.height) {
+					t = c;
+					used = g.gl_pathv[i];
+				}
+		}
+		globfree(&g);
+		if (used.empty())
+			return false;
+	}
+	bool same = t.width == w && t.height == h;
+	bool scaled = !same && std::fabs(double(t.width) * h / (double(t.height) * w) - 1) < 0.01;
+	if (!same && !scaled && (w > t.width || h > t.height)) {
+		LOG("lsc: %s is %dx%d, smaller than the %dx%d mode; not used\n", used.c_str(), t.width, t.height, w, h);
+		return false;
+	}
+	memset(&out, 0, sizeof(out));
+	int xs[8], ys[8];
+	lsc_sectors(w, xs);
+	lsc_sectors(h, ys);
+	if (same) {
+		std::copy(t.x_sect, t.x_sect + 8, xs);
+		std::copy(t.y_sect, t.y_sect + 8, ys);
+	}
+	for (int i = 0; i < 8; i++) {
+		out.x_size_tbl[i] = xs[i];
+		out.y_size_tbl[i] = ys[i];
+		out.x_grad_tbl[i] = std::lround(32768.0 / std::max(1, xs[i]));
+		out.y_grad_tbl[i] = std::lround(32768.0 / std::max(1, ys[i]));
+	}
+	double px[LSC_N], py[LSC_N];
+	LscTable::points(xs, px);
+	LscTable::points(ys, py);
+	// The struct is packed: write the tables element by element.
+	auto put = [&out](int c, int k, __u16 v) {
+		switch (c) {
+		case 0: out.r_data_tbl[k] = v; break;
+		case 1: out.gr_data_tbl[k] = v; break;
+		case 2: out.gb_data_tbl[k] = v; break;
+		default: out.b_data_tbl[k] = v; break;
+		}
+	};
+	for (int c = 0; c < 4; c++)
+		for (int j = 0; j < LSC_N; j++)
+			for (int i = 0; i < LSC_N; i++) {
+				double x = px[i], y = py[j];
+				if (scaled) {
+					x = x * t.width / w;
+					y = y * t.height / h;
+				} else if (!same) {
+					x += (t.width - w) / 2.0;
+					y += (t.height - h) / 2.0;
+				}
+				double v = same ? t.gain[c][j][i] : t.at(c, x, y);
+				put(c, j * LSC_N + i, std::clamp(std::lround(v * 1024), 1L, 8191L));
+			}
+	LOG("lsc: %s%s\n", used.c_str(), same ? "" : scaled ? " (scaled to the mode)" : " (centre crop of it)");
+	return true;
+}
+
 // ---------------------------------------------------------------------- 3A
 
 class Engine {
@@ -381,6 +568,8 @@ private:
 	double red_, blue_;
 	double sent_red_ = 0, sent_blue_ = 0;
 	double stat_black_ = 0;     // black level left in the statistics
+	bool lsc_ = false;
+	isp2x_lsc_cfg lsc_cfg_{};
 };
 
 void Engine::fill_params(void *buf, size_t size, bool first)
@@ -435,6 +624,12 @@ void Engine::fill_params(void *buf, size_t size, bool first)
 				gc.gamma_y[i] = std::lround(4095 * std::pow(x, 1.0 / cfg_.gamma));
 			}
 		}
+		if (lsc_ && offsetof(isp21_isp_params_cfg, others.lsc_cfg) + sizeof(isp2x_lsc_cfg) <= size) {
+			p->module_en_update |= ISP2X_MODULE_LSC;
+			p->module_ens |= ISP2X_MODULE_LSC;
+			p->module_cfg_update |= ISP2X_MODULE_LSC;
+			p->others.lsc_cfg = lsc_cfg_;
+		}
 	}
 	sent_red_ = red_;
 	sent_blue_ = blue_;
@@ -455,6 +650,17 @@ bool Engine::start()
 	if (!sensor_.open(cfg_.sensor)) {
 		LOG("no sensor sub-device with an exposure control\n");
 		return false;
+	}
+	lsc_ = false;
+	if (cfg_.lsc) {
+		// Rockchip sub-device naming "m00_b_imx219 1-0010": the sensor is "imx219".
+		std::string nm = sensor_.name.substr(0, sensor_.name.find(' '));
+		if (nm.size() > 6 && nm[0] == 'm' && nm[3] == '_' && nm[5] == '_')
+			nm.erase(0, 6);
+		lsc_ = lsc_params(cfg_, nm, sensor_.width, sensor_.height, lsc_cfg_);
+		if (!lsc_)
+			LOG("lsc: no table for %s %dx%d in %s (kray-cam-lsc makes one)\n", nm.c_str(), sensor_.width,
+			    sensor_.height, cfg_.lsc_dir.c_str());
 	}
 	max_exp_ = cfg_.max_exposure > 0 ? std::min(cfg_.max_exposure, sensor_.exp_max) : sensor_.exp_max;
 	LOG("stream start: sensor \"%s\" %dx%d, exposure %d..%d, %s %d..%d%s\n", sensor_.name.c_str(),
