@@ -12,12 +12,13 @@ the lens. Then run:
 It runs kray-cam-3a with a linear setup (no gamma, white balance gains 1.0,
 auto exposure at about 45%), captures frames from the ISP main path at the
 sensor's full size, and computes per-colour gains on the ISP's 17 x 17 lens
-shading grid, relative to the centre of the frame. The result goes to
+shading grid, relative to the centre of the frame: brightness up to
+--max-gain, colour (red and blue against green) in full. The result goes to
 /etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf, which kray-cam-3a
 loads at the next stream start for that sensor. Calibrate in the sensor's
 full-size mode: kray-cam-3a maps that table onto binned and cropped modes.
 
-Options: --frames N (default 8), --max-gain G (default 3.0), --out FILE,
+Options: --frames N (default 8), --max-gain G (brightness, default 3.0), --out FILE,
 --keep (keep the averaged frame as .npy next to the output), --from FILE.npy
 (recompute the table from a kept frame instead of capturing).
 """
@@ -36,6 +37,7 @@ except ImportError:
     sys.exit("kray-cam-lsc needs NumPy: sudo apt install python3-numpy")
 
 GRID = 16  # sectors per axis; 17 x 17 grid points
+MAX_TABLE_GAIN = 8191 / 1024  # the ISP's table values are 13 bits, 1024 = 1.0
 
 
 def sh(*args, **kw):
@@ -104,41 +106,38 @@ def grid_points(size):
     return np.array(pts), sect
 
 
-def smooth_fit(level, deg=6, iters=6):
-    """Fit a smooth 2D polynomial to a shading map (relative level) with
-    robust reweighting, so glare, specks or a stray edge in the target do
-    not end up in the table. Returns the fitted function and the RMS residual
-    of the points that were kept."""
-    h, w = level.shape
-    yy, xx = np.mgrid[0:h, 0:w]
-    x = (xx.ravel() - w / 2) / (w / 2)
-    y = (yy.ravel() - h / 2) / (h / 2)
-    z = level.ravel()
-    terms = [(i, j) for i in range(deg + 1) for j in range(deg + 1 - i)]
-    A = np.stack([x ** i * y ** j for i, j in terms], 1)
-    wgt = np.ones_like(z)
-    for _ in range(iters):
-        coef, *_ = np.linalg.lstsq(A * wgt[:, None], z * wgt, rcond=None)
-        r = z - A @ coef
-        s = 1.4826 * np.median(np.abs(r[wgt > 0])) + 1e-6
-        wgt = (np.abs(r) < 3 * s).astype(float)
-
-    def f(px, py):
-        xs = (np.asarray(px, float) - w / 2) / (w / 2)
-        ys = (np.asarray(py, float) - h / 2) / (h / 2)
-        return sum(c * xs ** i * ys ** j for c, (i, j) in zip(coef, terms))
-    return f, float(np.sqrt(np.mean(r[wgt > 0] ** 2))), float(1 - wgt.mean())
-
-
-def local_mean(img, ys, xs, win):
+def local_fit(blocks, step, xs, ys, xsect, ysect, iters=3):
+    """Shading level at each grid point: a quadratic surface fitted to the
+    block means within one sector around the point, with outliers (dust,
+    marks on the diffuser) dropped. A local fit follows the steep fall-off
+    in the corners, where one polynomial over the whole frame does not, and
+    it does not reach further than one sector past the frame edge. Returns
+    the levels and the RMS residual of the points kept, relative to the
+    level."""
+    bh, bw = blocks.shape
+    cy = (np.arange(bh) + 0.5) * step
+    cx = (np.arange(bw) + 0.5) * step
+    rx, ry = max(xsect), max(ysect)
     out = np.zeros((len(ys), len(xs)))
-    h, w = img.shape
-    for i, y in enumerate(ys):
-        for j, x in enumerate(xs):
-            y0, y1 = max(0, y - win), min(h, y + win + 1)
-            x0, x1 = max(0, x - win), min(w, x + win + 1)
-            out[i, j] = img[y0:y1, x0:x1].mean()
-    return out
+    res = []
+    for j, py in enumerate(ys):
+        yi = np.nonzero(np.abs(cy - py) <= ry)[0]
+        for i, px in enumerate(xs):
+            xi = np.nonzero(np.abs(cx - px) <= rx)[0]
+            yy, xx = np.meshgrid((cy[yi] - py) / ry, (cx[xi] - px) / rx, indexing="ij")
+            z = blocks[np.ix_(yi, xi)].ravel()
+            x, y = xx.ravel(), yy.ravel()
+            A = np.stack([np.ones_like(x), x, y, x * x, x * y, y * y], 1)
+            keep = np.ones(z.size, bool)
+            for _ in range(iters):
+                coef, *_ = np.linalg.lstsq(A[keep], z[keep], rcond=None)
+                r = z - A @ coef
+                s = 1.4826 * np.median(np.abs(r[keep])) + 1e-6
+                keep = np.abs(r) < 3 * s
+            out[j, i] = coef[0]
+            res.append(r[keep] / max(coef[0], 1e-3))
+    res = np.concatenate(res)
+    return out, float(np.sqrt(np.mean(res ** 2)))
 
 
 def main():
@@ -189,23 +188,27 @@ def compute(a, sensor, w, h, rgb, n, out):
     if min(centre) < 40 or max(centre) > 235:
         sys.exit("centre level %s is too dark or saturated; adjust the light" % [round(c) for c in centre])
     # Shading map per colour on a coarse grid (8 x 8 pixel blocks), fitted
-    # with a smooth surface; the table takes the fit at the 17 x 17 points.
+    # locally around each of the 17 x 17 grid points.
     step = 8
     hh, ww = (h // step) * step, (w // step) * step
-    gains, report = [], []
+    levels, report = [], []
     for c in range(3):
         blocks = rgb[c, :hh, :ww].reshape(hh // step, step, ww // step, step).mean(axis=(1, 3))
-        f, rms, dropped = smooth_fit(blocks / centre[c])
-        gx, gy = np.meshgrid(xs / step, ys / step)
-        level = np.maximum(f(gx, gy) / f(blocks.shape[1] / 2, blocks.shape[0] / 2), 1.0 / a.max_gain)
-        gains.append(np.clip(1.0 / level, 1.0, a.max_gain))
-        report.append("%s rms %.3f dropped %.0f%%" % ("RGB"[c], rms, 100 * dropped))
-    corner = [round(float(1 / g[0, 0]), 2) for g in gains]
-    print("%d frames; centre R/G/B %s; corner level vs centre %s" %
-          (n, [round(c) for c in centre], corner))
+        lv, rms = local_fit(blocks, step, xs, ys, xsect, ysect)
+        levels.append(np.maximum(lv / lv[GRID // 2, GRID // 2], 1.0 / 16))
+        report.append("%s rms %.3f" % ("RGB"[c], rms))
+    # Brightness (green) is corrected up to --max-gain, as more brings up the
+    # noise too much. Colour is corrected in full: red and blue get the green
+    # gain times their shading relative to green (up to the ISP's 8x), so the
+    # corners stay neutral even where they stay darker.
+    g_gain = np.clip(1.0 / levels[1], 1.0, a.max_gain)
+    gains = [np.clip(g_gain * levels[1] / levels[c], 0.5, MAX_TABLE_GAIN) if c != 1 else g_gain
+             for c in range(3)]
+    print("%d frames; centre R/G/B %s; corner level vs centre R/G/B %s" %
+          (n, [round(c) for c in centre], [round(float(l[0, 0]), 2) for l in levels]))
     print("fit: " + ", ".join(report))
-    if a.max_gain in [round(float(g.max()), 2) for g in gains]:
-        print("note: some gains hit --max-gain %.1f" % a.max_gain)
+    if g_gain.max() >= a.max_gain - 0.005:
+        print("note: brightness gains hit --max-gain %.1f (colour is corrected in full)" % a.max_gain)
 
     # Bayer channel order of the ISP tables: R, Gr, Gb, B; 1024 = gain 1.0.
     tables = [gains[0], gains[1], gains[1], gains[2]]
@@ -217,7 +220,7 @@ def compute(a, sensor, w, h, rgb, n, out):
         f.write("x_sect = %s\n" % " ".join(map(str, xsect)))
         f.write("y_sect = %s\n" % " ".join(map(str, ysect)))
         for name, t in zip(("r", "gr", "gb", "b"), tables):
-            vals = np.clip(np.rint(t * 1024), 1024, 4095).astype(int)
+            vals = np.clip(np.rint(t * 1024), 512, 8191).astype(int)
             for row in range(GRID + 1):
                 f.write("%s%d = %s\n" % (name, row, " ".join(map(str, vals[row]))))
     if a.keep:
