@@ -1,0 +1,23 @@
+# Noise of the Raspberry Pi Camera v2 (IMX219) through the kray-cam-3a
+# pipeline (black level subtraction, white balance, colour correction,
+# gamma 2.2), measured on Kray-SoM-RKC (2026-10-15): two consecutive frames
+# of a diffuser on the lens at 3280x2464, three exposures per gain, noise =
+# std(frame1 - frame2) / sqrt(2) in 32x32 blocks against the block's mean
+# luma (8-bit Y, 221 = saturated). Per gain, the variance in linear light is
+# a * x + b (x = (Y / 221)^2.2, shot and read noise), fitted with outliers
+# dropped; the fits stay within 3-6 % of the measurements.
+# scripts/gen-isp21-nr.py --noise turns this into the YNR noise curves.
+ymax = 221
+# gain  a  b
+1 1.8936e-04 1.3924e-07
+1.5 2.6262e-04 1.1557e-06
+2 3.3473e-04 2.4496e-06
+3 4.6700e-04 6.5680e-06
+4 6.0113e-04 1.1030e-05
+6 8.6967e-04 2.3854e-05
+8 1.1282e-03 2.9270e-05
+10.66 1.4816e-03 3.6177e-05
+16 2.1696e-03 5.9730e-05
+24 3.1598e-03 1.3208e-04
+32 4.1513e-03 2.2826e-04
+48 5.9582e-03 5.4067e-04

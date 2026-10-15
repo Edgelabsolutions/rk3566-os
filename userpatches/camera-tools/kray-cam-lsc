@@ -9,12 +9,12 @@ the lens. Then run:
 
     sudo kray-cam-lsc
 
-It runs kray-cam-3a with a linear setup (no gamma, no colour correction,
-white balance gains 1.0, auto exposure at about 45%), captures frames from
-the ISP main path at the sensor's full size, and computes per-colour gains
-on the ISP's 17 x 17 lens shading grid, relative to the centre of the
-frame: brightness up to --max-gain, colour (red and blue against green) in
-full. The result goes to
+It runs kray-cam-3a with a linear setup (no gamma, no colour correction or
+noise reduction, white balance gains 1.0, auto exposure at about 45%),
+captures frames from the ISP main path at the sensor's full size, and
+computes per-colour gains on the ISP's 17 x 17 lens shading grid, relative
+to the centre of the frame: brightness up to --max-gain, colour (red and
+blue against green) in full. The result goes to
 /etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf, which kray-cam-3a
 loads at the next stream start for that sensor. Calibrate in the sensor's
 full-size mode: kray-cam-3a maps that table onto binned and cropped modes.
@@ -163,7 +163,8 @@ def main():
 
     conf = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False)
     conf.write("ae = 1\ntarget = 0.45\nawb = 0\nwb_red = 1.0\nwb_blue = 1.0\n"
-               "gamma = 0\nblack_level_subtraction = 1\nlsc = 0\nccm = 0\n")
+               "gamma = 0\nblack_level_subtraction = 1\nlsc = 0\nccm = 0\n"
+               "denoise = 0\nsharpen = 0\n")
     conf.close()
     was_active = subprocess.run(["systemctl", "is-active", "--quiet", "kray-cam-3a"]).returncode == 0
     subprocess.run(["systemctl", "stop", "kray-cam-3a"])
