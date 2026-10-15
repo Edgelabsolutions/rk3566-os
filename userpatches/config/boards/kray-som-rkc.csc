@@ -95,6 +95,16 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 	declare -g -a KERNEL_DRIVERS_SKIP+=(driver_uwe5622 driver_rtw88)
 }
 
+# Mainline kernel pinned to a stable release. Armbian v26.5.1 follows the
+# linux-6.18.y branch, and its patches do not always build on the newest
+# release: with 6.18.57 its VeriSilicon IOMMU driver (vsi-iommu) fails on the
+# changed attach_dev signature. Move the tag on when a new release is tested.
+function post_family_config__kray_som_rkc_current_kernel_pin() {
+	[[ "${BRANCH}" == "current" ]] || return 0
+	declare -g KERNELBRANCH="tag:v6.18.56"
+	display_alert "$BOARD" "Using mainline kernel ${KERNELBRANCH}" "info"
+}
+
 # Serial-only console: kernel log, initramfs rescue shell and login on UART2
 # (1500000 8N1). HDMI still gets a login prompt on tty1.
 function post_customize_image__kray_som_rkc_serial_console() {
