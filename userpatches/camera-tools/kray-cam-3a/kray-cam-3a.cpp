@@ -14,7 +14,9 @@
 //   - auto white balance (grey world): sets the ISP red and blue gains so
 //     that the near-neutral windows come out grey.
 // With the first parameters it also loads a lens shading table made by
-// kray-cam-lsc (/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf).
+// kray-cam-lsc (/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf), and
+// with every white balance change it sets a colour correction matrix for
+// the light's colour temperature (/etc/kray-cam-3a/ccm-<sensor>.conf).
 //
 // Settings: /etc/kray-cam-3a.conf (key = value, see the shipped file).
 #include <algorithm>
@@ -80,6 +82,8 @@ struct Config {
 	int bls_value = -1;         // ISP black level value; -1 = from black_level
 	bool lsc = true;            // lens shading correction, if there is a table
 	std::string lsc_dir = "/etc/kray-cam-3a";
+	bool ccm = true;            // colour correction, if there is a table
+	double saturation = 1.0;    // 0 = no colour correction, 1 = the table's matrix
 	std::string sensor;         // sub-device name match; empty = first one with an exposure control
 };
 
@@ -117,6 +121,8 @@ static Config load_config(const char *path)
 		else if (k == "bls_value") c.bls_value = atoi(v.c_str());
 		else if (k == "lsc") c.lsc = yes();
 		else if (k == "lsc_dir") c.lsc_dir = v;
+		else if (k == "ccm") c.ccm = yes();
+		else if (k == "saturation") c.saturation = std::clamp(atof(v.c_str()), 0.0, 2.0);
 	}
 	return c;
 }
@@ -368,6 +374,10 @@ struct Sensor {
 // half of the image and mirrored; 17 x 17 gains per Bayer channel (R, Gr, Gb,
 // B), 1024 = 1.0.
 constexpr int LSC_N = 17;
+// The ISP's colour correction coefficients: 1.0 and the signed 11-bit range
+// (the hardware takes the matrix minus the identity, see fill_params).
+constexpr int CCM_ONE = 128;
+constexpr long CCM_LIMIT = 1023;
 
 struct LscTable {
 	int width = 0, height = 0;
@@ -541,6 +551,95 @@ static bool lsc_params(const Config &cfg, const std::string &sensor, int w, int 
 	return true;
 }
 
+// ------------------------------------------------- colour correction table
+
+// Colour correction matrices for a few colour temperatures, and the colour
+// of grey (R/G, B/G before white balance) along the colour temperatures, to
+// tell the temperature from the white balance gains. Same layout as the
+// Raspberry Pi tuning files ("ct_curve" and "ccms").
+struct CcmTable {
+	std::vector<double> ct, r, b; // grey curve
+	std::vector<std::pair<double, std::vector<double>>> ccms; // ct, 3x3 row-major
+
+	bool load(const std::string &path)
+	{
+		std::ifstream f(path);
+		if (!f)
+			return false;
+		std::string line;
+		while (std::getline(f, line)) {
+			size_t h = line.find('#');
+			if (h != std::string::npos)
+				line.erase(h);
+			size_t eq = line.find('=');
+			if (eq == std::string::npos)
+				continue;
+			std::istringstream ks(line.substr(0, eq)), vs(line.substr(eq + 1));
+			std::string k;
+			ks >> k;
+			std::vector<double> v;
+			for (double d; vs >> d;)
+				v.push_back(d);
+			if (k == "ct_curve" && v.size() >= 6 && v.size() % 3 == 0) {
+				for (size_t i = 0; i < v.size(); i += 3) {
+					ct.push_back(v[i]);
+					r.push_back(v[i + 1]);
+					b.push_back(v[i + 2]);
+				}
+			} else if (k == "ccm" && v.size() == 9) {
+				double t;
+				if (ks >> t)
+					ccms.emplace_back(t, v);
+			}
+		}
+		std::sort(ccms.begin(), ccms.end());
+		return ct.size() >= 2 && !ccms.empty();
+	}
+
+	// Colour temperature of the grey that the gains make neutral: the
+	// nearest point of the grey curve to (1 / red gain, 1 / blue gain).
+	double temperature(double red, double blue) const
+	{
+		double pr = 1 / red, pb = 1 / blue, best = 1e9, t = ct[0];
+		for (size_t i = 0; i + 1 < ct.size(); i++) {
+			double dr = r[i + 1] - r[i], db = b[i + 1] - b[i];
+			double u = std::clamp(((pr - r[i]) * dr + (pb - b[i]) * db) / std::max(1e-9, dr * dr + db * db), 0.0, 1.0);
+			double er = r[i] + u * dr - pr, eb = b[i] + u * db - pb;
+			if (er * er + eb * eb < best) {
+				best = er * er + eb * eb;
+				t = ct[i] + u * (ct[i + 1] - ct[i]);
+			}
+		}
+		return t;
+	}
+
+	// The matrix for a colour temperature, linear between the table's.
+	std::vector<double> matrix(double t) const
+	{
+		if (t <= ccms.front().first)
+			return ccms.front().second;
+		if (t >= ccms.back().first)
+			return ccms.back().second;
+		size_t i = 1;
+		while (ccms[i].first < t)
+			i++;
+		double u = (t - ccms[i - 1].first) / (ccms[i].first - ccms[i - 1].first);
+		std::vector<double> m(9);
+		for (int k = 0; k < 9; k++)
+			m[k] = ccms[i - 1].second[k] * (1 - u) + ccms[i].second[k] * u;
+		return m;
+	}
+};
+
+// Rockchip sub-device naming "m00_b_imx219 1-0010": the sensor is "imx219".
+static std::string sensor_model(const std::string &subdev)
+{
+	std::string nm = subdev.substr(0, subdev.find(' '));
+	if (nm.size() > 6 && nm[0] == 'm' && nm[3] == '_' && nm[5] == '_')
+		nm.erase(0, 6);
+	return nm;
+}
+
 // ---------------------------------------------------------------------- 3A
 
 class Engine {
@@ -553,6 +652,14 @@ private:
 	bool start();
 	void stop();
 	void fill_params(void *buf, size_t size, bool first);
+	// Full scale over full scale minus the subtracted black level (12-bit).
+	double headroom() const
+	{
+		if (!cfg_.bls)
+			return 1.0;
+		long v = cfg_.bls_value >= 0 ? cfg_.bls_value : std::lround(cfg_.black * 4096);
+		return 4096.0 / std::max(2048L, 4096 - v);
+	}
 	bool send_params(bool first);
 	void on_stats(const rkisp_isp21_stat_buffer &s);
 	void auto_exposure(double level, double bright);
@@ -570,6 +677,9 @@ private:
 	double stat_black_ = 0;     // black level left in the statistics
 	bool lsc_ = false;
 	isp2x_lsc_cfg lsc_cfg_{};
+	bool ccm_ = false;
+	CcmTable ccm_table_;
+	double ccm_ct_ = 0; // colour temperature of the matrix in use
 };
 
 void Engine::fill_params(void *buf, size_t size, bool first)
@@ -580,11 +690,18 @@ void Engine::fill_params(void *buf, size_t size, bool first)
 	p->module_ens = ISP2X_MODULE_AWB_GAIN;
 	p->module_cfg_update = ISP2X_MODULE_AWB_GAIN;
 	isp21_awb_gain_cfg &g = p->others.awb_gain_cfg;
-	int r = std::lround(red_ * 256), b = std::lround(blue_ * 256);
+	// After the black level subtraction a saturated pixel is below full
+	// scale; all four gains carry the headroom factor that brings it back
+	// up, so that clipped areas come out white. Without it the red and
+	// blue gains push clipped highlights above the clipped green
+	// (magenta), most visibly in the centre, where lens shading
+	// correction adds no gain.
+	const double k = headroom();
+	int r = std::lround(red_ * k * 256), b = std::lround(blue_ * k * 256), gr = std::lround(k * 256);
 	g.gain0_red = g.gain1_red = g.gain2_red = r;
 	g.gain0_blue = g.gain1_blue = g.gain2_blue = b;
-	g.gain0_green_r = g.gain1_green_r = g.gain2_green_r = 256;
-	g.gain0_green_b = g.gain1_green_b = g.gain2_green_b = 256;
+	g.gain0_green_r = g.gain1_green_r = g.gain2_green_r = gr;
+	g.gain0_green_b = g.gain1_green_b = g.gain2_green_b = gr;
 	if (first) {
 		stat_black_ = cfg_.black;
 		// Raw AE statistics over the whole sensor image, 15x15 windows.
@@ -631,6 +748,36 @@ void Engine::fill_params(void *buf, size_t size, bool first)
 			p->others.lsc_cfg = lsc_cfg_;
 		}
 	}
+	if (ccm_ && offsetof(isp21_isp_params_cfg, others.ccm_cfg) + sizeof(isp21_ccm_cfg) <= size) {
+		// The ISP's matrix works on linear RGB after white balance. It
+		// adds alpha x C x RGB to the input, with alpha from a curve over
+		// the luma (alp_y, 1024 = 1.0) and C in units of CCM_ONE, so a
+		// matrix M is programmed as C = M - I with alpha 1 everywhere
+		// (measured on the RK3566: C = 0 leaves the picture unchanged,
+		// alp_y = 0 switches the matrix off). Rows of the table's matrices
+		// add up to 1, so a saturation below 1 scales C down towards the
+		// identity and greys stay grey.
+		ccm_ct_ = ccm_table_.temperature(red_, blue_);
+		std::vector<double> m = ccm_table_.matrix(ccm_ct_);
+		auto c = [&](int k) {
+			double v = (m[k] - (k % 4 == 0 ? 1.0 : 0.0)) * cfg_.saturation;
+			return __s16(std::clamp(std::lround(v * CCM_ONE), -CCM_LIMIT, CCM_LIMIT));
+		};
+		p->module_en_update |= ISP2X_MODULE_CCM;
+		p->module_ens |= ISP2X_MODULE_CCM;
+		p->module_cfg_update |= ISP2X_MODULE_CCM;
+		isp21_ccm_cfg &cc = p->others.ccm_cfg;
+		cc.highy_adjust_dis = 1;
+		cc.coeff0_r = c(0), cc.coeff1_r = c(1), cc.coeff2_r = c(2);
+		cc.coeff0_g = c(3), cc.coeff1_g = c(4), cc.coeff2_g = c(5);
+		cc.coeff0_b = c(6), cc.coeff1_b = c(7), cc.coeff2_b = c(8);
+		// Luma weights for the highlight adjustment (off), BT.601.
+		cc.coeff0_y = std::lround(0.299 * CCM_ONE);
+		cc.coeff1_y = std::lround(0.587 * CCM_ONE);
+		cc.coeff2_y = std::lround(0.114 * CCM_ONE);
+		for (int i = 0; i < ISP21_DHAZ_ENH_CURVE_NUM; i++)
+			cc.alp_y[i] = 1024;
+	}
 	sent_red_ = red_;
 	sent_blue_ = blue_;
 }
@@ -652,15 +799,22 @@ bool Engine::start()
 		return false;
 	}
 	lsc_ = false;
+	std::string nm = sensor_model(sensor_.name);
 	if (cfg_.lsc) {
-		// Rockchip sub-device naming "m00_b_imx219 1-0010": the sensor is "imx219".
-		std::string nm = sensor_.name.substr(0, sensor_.name.find(' '));
-		if (nm.size() > 6 && nm[0] == 'm' && nm[3] == '_' && nm[5] == '_')
-			nm.erase(0, 6);
 		lsc_ = lsc_params(cfg_, nm, sensor_.width, sensor_.height, lsc_cfg_);
 		if (!lsc_)
 			LOG("lsc: no table for %s %dx%d in %s (kray-cam-lsc makes one)\n", nm.c_str(), sensor_.width,
 			    sensor_.height, cfg_.lsc_dir.c_str());
+	}
+	ccm_ = false;
+	if (cfg_.ccm) {
+		std::string path = cfg_.lsc_dir + "/ccm-" + nm + ".conf";
+		ccm_table_ = CcmTable();
+		ccm_ = ccm_table_.load(path);
+		if (ccm_)
+			LOG("ccm: %s (%zu matrices, saturation %.2f)\n", path.c_str(), ccm_table_.ccms.size(), cfg_.saturation);
+		else
+			LOG("ccm: no table %s\n", path.c_str());
 	}
 	max_exp_ = cfg_.max_exposure > 0 ? std::min(cfg_.max_exposure, sensor_.exp_max) : sensor_.exp_max;
 	LOG("stream start: sensor \"%s\" %dx%d, exposure %d..%d, %s %d..%d%s\n", sensor_.name.c_str(),
@@ -781,7 +935,7 @@ void Engine::auto_wb(const isp2x_rawaebig_stat &ae)
 	blue_ += (wb - blue_) * 0.3;
 	if (std::fabs(red_ - sent_red_) > 0.01 || std::fabs(blue_ - sent_blue_) > 0.01) {
 		if (send_params(false))
-			DBG("awb: %d windows, R %.2f B %.2f\n", n, red_, blue_);
+			DBG("awb: %d windows, R %.2f B %.2f, %.0f K\n", n, red_, blue_, ccm_ ? ccm_ct_ : 0.0);
 	}
 }
 
