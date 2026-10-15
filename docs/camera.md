@@ -213,7 +213,12 @@ media-ctl -d $MD --set-v4l2 '"m00_b_imx219 1-0010":0[fmt:SRGGB10_1X10/1920x1080]
 media-ctl -d $MD --set-v4l2 '"rkisp-isp-subdev":0[fmt:SRGGB10_1X10/1920x1080 crop:(0,0)/1920x1080]'
 ```
 
-Back to the full mode: the same two commands with `3280x2464`.
+Back to the full mode: the same two commands with `3280x2464`, and reset the crop of the main path, which stays at 1920x1080 (with it, a 3280x2464 capture gets no frames and the kernel log fills with `MIPI drop frame`):
+
+```bash
+MP=$(v4l2-ctl --list-devices | awk '/rkisp_mainpath/{getline; print $1; exit}')
+v4l2-ctl -d $MP --set-selection target=crop,left=0,top=0,width=3280,height=2464
+```
 
 ## Image quality: auto exposure, white balance and lens shading
 
@@ -246,13 +251,13 @@ For the IMX477 the analogue gain register is `1024 - 1024 / gain` (0 = 1x, 512 =
 
 ### Lens shading
 
-A lens leaves the corners of the picture darker than the centre: with the Raspberry Pi Camera v2 the corners get about a quarter of the light of the centre, the middle of the left and right edges about 40%. The ISP corrects this with a table of gains per colour on a 17 x 17 grid, and `kray-cam-3a` loads it when the camera starts:
+A lens leaves the corners of the picture darker than the centre, and tinted: with the Raspberry Pi Camera v2 the corners get about a fifth to a quarter of the light of the centre (red falls off more than green and blue, so uncorrected corners look cyan), the middle of the left and right edges about 40%. The ISP corrects this with a table of gains per colour on a 17 x 17 grid, and `kray-cam-3a` loads it when the camera starts:
 
 ```
 kray-cam-3a: lsc: /etc/kray-cam-3a/lsc-imx219-3280x2464.conf
 ```
 
-The image ships a table for the IMX219 (Raspberry Pi Camera v2). It raises the corners by up to 3x; a full correction would need about 4x, which brings up the noise too much. A table made for the sensor's full-size mode also serves its other modes: `kray-cam-3a` scales it for a mode with the same aspect ratio (binning) and cuts out the centre for any other (the IMX219 1920x1080 mode is a centre crop; the log then says `(centre crop of it)`). Without a table for the sensor nothing changes. To switch the correction off, set `lsc = 0` in `/etc/kray-cam-3a.conf`.
+The image ships a table for the IMX219 (Raspberry Pi Camera v2). It raises the brightness of the corners by up to 3x (a full correction would need about 4.5x, which brings up the noise too much), so the corners stay at about 0.7-0.8 of the centre; the colour is corrected in full, so they stay neutral. Measured on a diffuser with the table: within 4% of the centre over most of the frame, red/green and blue/green within 0.96-1.02 everywhere. A table made for the sensor's full-size mode also serves its other modes: `kray-cam-3a` scales it for a mode with the same aspect ratio (binning) and cuts out the centre for any other (the IMX219 1920x1080 mode is a centre crop; the log then says `(centre crop of it)`). Without a table for the sensor nothing changes. To switch the correction off, set `lsc = 0` in `/etc/kray-cam-3a.conf`.
 
 For another camera module or lens, make a table with `kray-cam-lsc`:
 
@@ -262,10 +267,10 @@ For another camera module or lens, make a table with `kray-cam-lsc`:
    sudo apt install python3-numpy     # once
    sudo kray-cam-lsc --keep
    ```
-   It stops `kray-cam-3a`, captures frames with a linear setup (no gamma, no white balance), fits a smooth surface to the shading per colour (specks of dust and small marks on the diffuser are left out) and writes `/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf`. Then it starts `kray-cam-3a` again; the next stream uses the table.
+   It stops `kray-cam-3a`, captures frames with a linear setup (no gamma, no white balance), fits the shading per colour around each grid point (specks of dust and small marks on the diffuser are left out) and writes `/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf`. Then it starts `kray-cam-3a` again; the next stream uses the table.
 3. Check it: run it twice, turning the diffuser between the runs. The gains should agree to a few hundredths; if they do not, the light on the diffuser is not even.
 
-`--max-gain` (default 3.0, up to 8) sets the largest correction; `--from FILE.npy` recomputes a table from a capture kept with `--keep`.
+`--max-gain` (default 3.0, up to 8) sets the largest brightness correction (colour is always corrected in full); `--from FILE.npy` recomputes a table from a capture kept with `--keep`.
 
 ## Lens focus
 
@@ -340,4 +345,4 @@ The analogue input to use (the module's CVBS connector is usually AIN1) and brig
 - **Lens focus (Camera Module 3, Arducam 16 and 64 MP) and HDMI input (TC358743)**: drivers, overlays and the EDID service build; not yet tested with hardware.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above.
 
-Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219. Lens shading correction: tested with the IMX219 in the 3280x2464 and 1920x1080 modes (the corners come out 2.8-3x brighter, the centre unchanged).
+Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219. Lens shading correction: tested with the IMX219 in the 3280x2464 and 1920x1080 modes (on a diffuser: corners from 0.22 to 0.7-0.8 of the centre, colour within 0.96-1.02).
