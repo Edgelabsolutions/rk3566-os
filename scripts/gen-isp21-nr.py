@@ -6,11 +6,14 @@
 #
 # This is a Python port of the parts of Rockchip's camera_engine_rkaiq that
 # turn tuning parameters into ISP register values for the ISP21 colour noise
-# reduction (acnr, CNR v1), luma noise reduction (aynr2, YNR v2) and
-# sharpening (asharp3, sharp v3): cnr_init_params_json_V1,
+# reduction (acnr, CNR v1), luma noise reduction (aynr2, YNR v2),
+# sharpening (asharp3, sharp v3) and Bayer noise reduction (arawnr2,
+# bayernr v2: 2D BAYNR and temporal BAY3D): cnr_init_params_json_V1,
 # cnr_select_params_by_ISO_V1, cnr_fix_transfer_V1, ynr_init_params_json_V2,
 # ynr_select_params_by_ISO_V2, ynr_fix_transfer_V2, sharp_init_params_json_V3,
-# sharp_select_params_by_ISO_V3, sharp_fix_transfer_V3 and the field order of
+# sharp_select_params_by_ISO_V3, sharp_fix_transfer_V3,
+# bayernr2D/3D_init_params_json_V2, bayernr2D/3D_select_params_by_ISO_V2,
+# bayernr2D/3D_fix_transfer_V2 and the field order of
 # Isp21Params.cpp. Source: rkaiq 2024_04_08 as mirrored in
 # https://github.com/JeffyCN/mirrors (branch rkaiq-2024_04_08).
 # Copyright (c) 2019-2024 Rockchip Electronics Co., Ltd.
@@ -25,8 +28,9 @@
 # (see userpatches/camera-tools/kray-cam-3a/noise-imx219.txt).
 #
 # The output lists, for a grid of ISO values (50 x 2^(k/4), 50 to 12800),
-# the fields of the kernel structs isp21_cnr_cfg, isp21_ynr_cfg and
-# isp21_sharp_cfg in their declaration order. kray-cam-3a takes the line for
+# the fields of the kernel structs isp21_cnr_cfg, isp21_ynr_cfg,
+# isp21_sharp_cfg, isp21_baynr_cfg and isp21_bay3d_cfg in their declaration
+# order. kray-cam-3a takes the line for
 # the ISO nearest to the sensor gain (ISO 50 = gain 1).
 import argparse
 import json
@@ -306,6 +310,82 @@ def sharp_fields(t, iso, strength=1.0):
 SHARP_WIDTHS = [1] * 5 + [1] * 7 + [2] * 16 + [1] * 2 + [2] * 16 + [1] * 9
 
 
+# ------------------------------------------------- Bayer NR v2 (2D and 3D)
+
+def gain_interp(isos, values, iso):
+    """bayernr*_select_params_by_ISO_V2: linear in the integer gain iso/50."""
+    g = max(int(iso / 50), 1)
+    gs = [i // 50 for i in isos]
+    lo = hi = 0
+    for i in range(len(gs) - 1):
+        if gs[i] <= g <= gs[i + 1]:
+            lo, hi = i, i + 1
+    if g > gs[-1]:
+        lo, hi = len(gs) - 2, len(gs) - 1
+        g = gs[-1]
+    if gs[hi] == gs[lo]:
+        return values[lo]
+    wl = (gs[hi] - g) / (gs[hi] - gs[lo])
+    wh = (g - gs[lo]) / (gs[hi] - gs[lo])
+    if isinstance(values[lo], list):
+        return [wl * a + wh * b for a, b in zip(values[lo], values[hi])]
+    return wl * values[lo] + wh * values[hi]
+
+
+def baynr_fields(calib, t2d, iso, strength=1.0):
+    s = max(strength, 1e-6)
+    isos = [c["iso"] for c in calib]
+    sigma = gain_interp(isos, [c["sigma"] for c in calib], iso)
+    luma = calib[0]["lumapoint"]
+    tisos = [x["iso"] for x in t2d]
+    g = lambda k: gain_interp(tisos, [x[k] for x in t2d], iso)
+    gauss_en = 1 if g("gauss_guide") != 0 else 0
+    dgain0 = clip((1 << 10) // (1 << (10 - 8)), 0, 0xffff)   # one frame: gain 1.0
+    pix_diff = clip((1 << 14) - 1, 0, 0x3fff)
+    diff_thld = clip(1 << 10, 0, 0x3ff)
+    softthld = clip(ftoi(g("ratio") / s * (1 << 10)), 0, 0x3ff)
+    streng = clip(ftoi(g("filter_strength") * s * (1 << 8)), 0, 0xfff)
+    reg_w1 = clip(ftoi(g("weight") * s * (1 << 10)), 0, 0x3ff)
+    sx = [clip(int(v), 0, 0xffff) for v in luma]
+    sy = [clip(ftoi(v), 0, 0xffff) for v in sigma]
+    edgesofts = g("edgesofts")
+    ypos, xpos = [4, 4, 4, 3, 3, 2, 2, 1], [4, 2, 0, 3, 1, 2, 0, 1]
+    w = []
+    for i in range(8):
+        t1 = (ypos[i] ** 2 + xpos[i] ** 2) / (2 * edgesofts * edgesofts)
+        w.append(int(math.exp(-t1) * (1 << 10)))
+    weit = [clip(w[5], 0, 0x3ff), clip(w[6], 0, 0x3ff), clip(w[7], 0, 0x3ff)]
+    # isp21_baynr_cfg order
+    return ([gauss_en, 0, 0, dgain0, 0, pix_diff, diff_thld, softthld, streng, reg_w1]
+            + sx + sy + [weit[2], weit[1], weit[0]])
+
+
+BAYNR_WIDTHS = [1, 1] + [2] * 8 + [2] * 32 + [2] * 3
+
+
+def bay3d_fields(calib, t3d, iso, strength=1.0):
+    s = max(strength, 1e-6)
+    isos = [c["iso"] for c in calib]
+    sigma = gain_interp(isos, [c["sigma"] for c in calib], iso)
+    luma = calib[0]["lumapoint"]
+    tisos = [x["iso"] for x in t3d]
+    g = lambda k: gain_interp(tisos, [x[k] for x in t3d], iso)
+    softwgt = clip(ftoi(g("softwgt") / s * (1 << 10)), 0, 0x3ff)
+    sigratio = clip(int(1.5 * (1 << 10)), 0, 0x3fff)
+    glbpk2 = 1024
+    exp_str = clip(ftoi(g("filter_strength") / s * (1 << 10)), 0, 0x3ff)
+    stren = clip(int(1.0 * (1 << 8)), 0, 0x100)
+    wgtlmt_h = clip(ftoi((1 - g("hi_clipwgt")) * s * (1 << 10)), 0, 0x3ff)
+    wgtlmt_l = clip(ftoi((1 - g("lo_clipwgt")) * s * (1 << 10)), 0, 0x3ff)
+    sx = [clip(int(v), 0, 0xffff) for v in luma]
+    sy = [clip(ftoi(v), 0, 0xffff) for v in sigma]
+    # isp21_bay3d_cfg order: exp_sel 1, bypass_en 0, pk_en 1 (local peak)
+    return [1, 0, 1, softwgt, sigratio, glbpk2, exp_str, stren, wgtlmt_h, wgtlmt_l] + sx + sy
+
+
+BAY3D_WIDTHS = [1, 1, 1, 2, 2, 4, 2, 2, 2, 2] + [2] * 32
+
+
 def main():
     ap = argparse.ArgumentParser(description="ISP21 NR/sharpening tables for kray-cam-3a")
     ap.add_argument("iq")
@@ -315,6 +395,8 @@ def main():
     ap.add_argument("--height", type=int, default=2464)
     ap.add_argument("--denoise", type=float, default=1.0, help="noise reduction strength")
     ap.add_argument("--sharpen", type=float, default=1.0, help="sharpening strength")
+    ap.add_argument("--bayer", type=float, default=1.0, help="Bayer 2D noise reduction strength")
+    ap.add_argument("--temporal", type=float, default=1.0, help="Bayer temporal noise reduction strength")
     ap.add_argument("--noise", help="measured noise model for the YNR noise curves")
     ap.add_argument("--note", help="file with the header comment for the output")
     a = ap.parse_args()
@@ -326,13 +408,19 @@ def main():
                            ynr["TuningPara"]["Setting"][a.setting]["Tuning_ISO"],
                            load_noise(a.noise) if a.noise else None)
     sharp_t = scene["sharp_v3"]["TuningPara"]["Setting"][a.setting]["Tuning_ISO"]
+    bnr = scene["bayernr_v2"]
+    bnr_c = bnr["CalibPara"]["Setting"][a.setting]["Calib_ISO"]
+    bnr_2d = bnr["Bayernr2D"]["Setting"][a.setting]["Tuning_ISO"]
+    bnr_3d = bnr["Bayernr3D"]["Setting"][a.setting]["Tuning_ISO"]
     lines = []
     for k in range(33):
         iso = round(50 * 2 ** (k / 4))
         for name, vals, widths in (
                 ("cnr", cnr_fields(cnr_t, cnr["Kernel_Coeff"]["kernel_5x5"], iso, a.denoise), CNR_WIDTHS),
                 ("ynr", ynr_fields(ynr_p, iso, a.width, a.height, a.denoise), YNR_WIDTHS),
-                ("sharp", sharp_fields(sharp_t, iso, a.sharpen), SHARP_WIDTHS)):
+                ("sharp", sharp_fields(sharp_t, iso, a.sharpen), SHARP_WIDTHS),
+                ("baynr", baynr_fields(bnr_c, bnr_2d, iso, a.bayer), BAYNR_WIDTHS),
+                ("bay3d", bay3d_fields(bnr_c, bnr_3d, iso, a.temporal), BAY3D_WIDTHS)):
             assert len(vals) == len(widths), (name, len(vals), len(widths))
             for v, w in zip(vals, widths):
                 assert 0 <= v < (1 << (8 * w)), (name, iso, v, w)

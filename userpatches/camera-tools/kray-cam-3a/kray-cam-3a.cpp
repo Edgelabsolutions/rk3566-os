@@ -17,8 +17,9 @@
 // kray-cam-lsc (/etc/kray-cam-3a/lsc-<sensor>-<width>x<height>.conf), and
 // with every white balance change it sets a colour correction matrix for
 // the light's colour temperature (/etc/kray-cam-3a/ccm-<sensor>.conf).
-// Noise reduction (colour and luma) and sharpening follow the sensor gain
-// (/etc/kray-cam-3a/nr-<sensor>.conf, made by scripts/gen-isp21-nr.py).
+// Noise reduction (Bayer 2D and temporal, colour, luma) and sharpening
+// follow the sensor gain (/etc/kray-cam-3a/nr-<sensor>.conf, made by
+// scripts/gen-isp21-nr.py).
 //
 // Settings: /etc/kray-cam-3a.conf (key = value, see the shipped file).
 #include <algorithm>
@@ -94,6 +95,8 @@ struct Config {
 	double saturation = 1.0;    // 0 = no colour correction, 1 = the table's matrix
 	bool denoise = true;        // colour and luma noise reduction, if there is a table
 	bool sharpen = true;        // sharpening, if there is a table
+	bool bayer_denoise = true;  // Bayer-domain noise reduction, if the table has it
+	bool temporal_denoise = true; // temporal (frame to frame) noise reduction, likewise
 	std::string sensor;         // sub-device name match; empty = first one with an exposure control
 };
 
@@ -135,6 +138,8 @@ static Config load_config(const char *path)
 		else if (k == "saturation") c.saturation = std::clamp(atof(v.c_str()), 0.0, 2.0);
 		else if (k == "denoise") c.denoise = yes();
 		else if (k == "sharpen") c.sharpen = yes();
+		else if (k == "bayer_denoise") c.bayer_denoise = yes();
+		else if (k == "temporal_denoise") c.temporal_denoise = yes();
 	}
 	return c;
 }
@@ -646,11 +651,12 @@ struct CcmTable {
 // ------------------------------------------- noise reduction / sharpening
 
 // Register values of the ISP's colour noise reduction (CNR), luma noise
-// reduction (YNR) and sharpening blocks for a grid of ISO values (ISO 50 =
-// sensor gain 1), one line per block and ISO: "cnr 400 = v0 v1 ...", the
-// fields of the kernel struct in declaration order.
+// reduction (YNR), sharpening and Bayer noise reduction (BAYNR, BAY3D)
+// blocks for a grid of ISO values (ISO 50 = sensor gain 1), one line per
+// block and ISO: "cnr 400 = v0 v1 ...", the fields of the kernel struct in
+// declaration order. The Bayer rows are optional.
 struct NrTable {
-	enum { CNR, YNR, SHARP, N };
+	enum { CNR, YNR, SHARP, BAYNR, BAY3D, N };
 	std::map<int, std::vector<long>> rows[N];
 
 	// Field sizes in bytes of isp21_cnr_cfg, isp21_ynr_cfg, isp21_sharp_cfg.
@@ -660,6 +666,8 @@ struct NrTable {
 			expand({{1, 19}, {2, 5}}),
 			expand({{1, 9}, {2, 12}, {1, 5}, {2, 6}, {1, 8}, {2, 51}, {1, 17}}),
 			expand({{1, 12}, {2, 16}, {1, 2}, {2, 16}, {1, 9}}),
+			expand({{1, 2}, {2, 43}}),
+			expand({{1, 3}, {2, 2}, {4, 1}, {2, 4}, {2, 32}}),
 		};
 		return w[b];
 	}
@@ -677,7 +685,7 @@ struct NrTable {
 		std::ifstream f(path);
 		if (!f)
 			return false;
-		static const char *const names[N] = {"cnr", "ynr", "sharp"};
+		static const char *const names[N] = {"cnr", "ynr", "sharp", "baynr", "bay3d"};
 		std::string line;
 		while (std::getline(f, line)) {
 			size_t h = line.find('#');
@@ -701,11 +709,13 @@ struct NrTable {
 				rows[b][iso] = v;
 			}
 		}
-		for (auto &r : rows)
-			if (r.empty())
+		for (int b = CNR; b <= SHARP; b++)
+			if (rows[b].empty())
 				return false;
 		return true;
 	}
+
+	bool has(int b) const { return !rows[b].empty(); }
 
 	// The ISO of the table nearest to iso (on a log scale).
 	int nearest(int b, double iso) const
@@ -791,6 +801,7 @@ private:
 	bool nr_ = false;
 	NrTable nr_table_;
 	int nr_iso_ = 0;    // ISO of the noise reduction settings in use
+	bool bayer_ = false, bay3d_ = false; // Bayer 2D / temporal noise reduction on
 };
 
 void Engine::fill_params(void *buf, size_t size, bool first)
@@ -927,6 +938,25 @@ void Engine::fill_params(void *buf, size_t size, bool first)
 			if (!cfg_.sharpen)
 				p->others.sharp_cfg.sw_sharp_bypass = 1;
 		}
+		// Bayer-domain noise reduction: the 2D filter, and the temporal
+		// one with it (rkaiq enables the 2D block whenever the temporal
+		// one runs). The driver allocates the temporal filter's frame
+		// buffer only when the first parameters enable it, so that is
+		// decided at stream start (bay3d_).
+		if (bayer_) {
+			nr_table_.put(NrTable::BAYNR, nr_table_.nearest(NrTable::BAYNR, nr_iso_),
+				      base + offsetof(isp21_isp_params_cfg, others.baynr_cfg));
+			p->module_en_update |= ISP2X_MODULE_BAYNR;
+			p->module_ens |= ISP2X_MODULE_BAYNR;
+			p->module_cfg_update |= ISP2X_MODULE_BAYNR;
+		}
+		if (bay3d_) {
+			nr_table_.put(NrTable::BAY3D, nr_table_.nearest(NrTable::BAY3D, nr_iso_),
+				      base + offsetof(isp21_isp_params_cfg, others.bay3d_cfg));
+			p->module_en_update |= ISP2X_MODULE_BAY3D;
+			p->module_ens |= ISP2X_MODULE_BAY3D;
+			p->module_cfg_update |= ISP2X_MODULE_BAY3D;
+		}
 	}
 	sent_red_ = red_;
 	sent_blue_ = blue_;
@@ -966,15 +996,18 @@ bool Engine::start()
 		else
 			LOG("ccm: no table %s\n", path.c_str());
 	}
-	nr_ = false;
-	if (cfg_.denoise || cfg_.sharpen) {
+	nr_ = bayer_ = bay3d_ = false;
+	if (cfg_.denoise || cfg_.sharpen || cfg_.bayer_denoise || cfg_.temporal_denoise) {
 		std::string path = cfg_.lsc_dir + "/nr-" + nm + ".conf";
 		nr_table_ = NrTable();
 		nr_ = nr_table_.load(path);
 		nr_iso_ = 50 * sensor_.factor(sensor_.gain);
+		bayer_ = nr_ && (cfg_.bayer_denoise || cfg_.temporal_denoise) && nr_table_.has(NrTable::BAYNR);
+		bay3d_ = bayer_ && cfg_.temporal_denoise && nr_table_.has(NrTable::BAY3D);
 		if (nr_)
-			LOG("nr: %s (denoise %s, sharpen %s)\n", path.c_str(), cfg_.denoise ? "on" : "off",
-			    cfg_.sharpen ? "on" : "off");
+			LOG("nr: %s (denoise %s, sharpen %s, bayer %s, temporal %s)\n", path.c_str(),
+			    cfg_.denoise ? "on" : "off", cfg_.sharpen ? "on" : "off", bayer_ ? "on" : "off",
+			    bay3d_ ? "on" : "off");
 		else
 			LOG("nr: no table %s\n", path.c_str());
 	}
