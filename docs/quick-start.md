@@ -36,7 +36,27 @@ xzcat rk3566-os-<version>-trixie-<image>.img.xz | sudo dd of=/dev/sdX bs=4M conv
 
 Replace `/dev/sdX` with the card (check with `lsblk`; the wrong device loses its data).
 
-On Windows or macOS, use balenaEtcher. Afterwards do not open or format the card in Explorer: Windows can rewrite the partition table, and the board then does not find its root partition.
+On macOS, use balenaEtcher.
+
+On **Windows**, use balenaEtcher too, and keep Windows away from the card. The card holds a Linux file system that Windows cannot read. Windows then offers to format or repair it, and can rewrite the partition table on its own, after which the board does not find its root partition. To prevent that:
+
+1. **Before flashing**, open a Command Prompt as Administrator and switch off the automatic mounting of new drives:
+   ```bat
+   mountvol /N
+   ```
+2. **Flash** with balenaEtcher. When it reports that the card is done, it has already ejected it: take the card out and put it into the board.
+3. **If Windows asks anyway:**
+   - "You need to format the disk in drive X: before you can use it": click **Cancel**;
+   - "Scan and fix": close the message, do not scan;
+   - Disk Management offers to **initialize the disk**: click **Cancel**.
+
+   Do not open the card in Explorer.
+4. **When you are done with cards**, switch automatic mounting back on:
+   ```bat
+   mountvol /E
+   ```
+
+If the card was formatted or repaired by mistake, flash it again.
 
 For a **LubanCat Zero N** reference board, set its device tree on the card before the first boot (see the [README](../README.md#boards)).
 
@@ -143,7 +163,7 @@ More: [vendor-npu-and-codecs.md](vendor-npu-and-codecs.md) and the [README](../R
 |---|---|
 | `kray-som-rkc.local` not found | Use the IP from your router or from the HDMI / serial login prompt; on Windows, install Bonjour or use the IP |
 | No picture on HDMI with the current image | Connect the monitor before power-on, or reboot with it connected |
-| Board does not boot after flashing on Windows | Flash again and do not open the card in Explorer afterwards |
+| Board does not boot after flashing on Windows | Windows has probably changed the card: flash it again, following the [Windows steps](#3-flash-the-card) |
 | `kray-board-check` reports NPU or Hailo as SKIP | Run `sudo kray-get-proprietary rknn` or `sudo kray-get-proprietary hailo` |
 | Camera not found | Check the overlay line with `grep overlays /boot/armbianEnv.txt`, check the cable orientation (with the power off), then follow the checks in [camera.md](camera.md#check) |
 | SoC gets hot | Fit a heatsink: without one the SoC throttles under long NPU or video loads |
