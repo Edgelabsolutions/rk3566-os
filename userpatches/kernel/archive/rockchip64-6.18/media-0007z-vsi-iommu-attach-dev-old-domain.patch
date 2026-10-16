@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Fri, 16 Oct 2026 14:00:00 +0300
+Subject: [PATCH] iommu: vsi: take the old domain in attach_dev
+
+Linux 6.18.57 backports fd714986e4e4 ("iommu: Pass in old domain to
+attach_dev callback functions"), so the attach_dev callback takes the
+old domain as a third argument. Update the two callbacks of the
+VeriSilicon IOMMU driver that Armbian's media-0007 patch adds.
+
+This is the fix of armbian/build db9f6c5120 ("rockchip64-6.18: fix broken
+iommu driver patch"), as a separate patch on top of the Armbian v26.5.1
+one: in v26.5.1 a user patch with the same name does not replace the
+core one.
+---
+--- a/drivers/iommu/vsi-iommu.c
++++ b/drivers/iommu/vsi-iommu.c
+@@ -491,7 +491,7 @@
+ }
+ 
+ static int vsi_iommu_identity_attach(struct iommu_domain *domain,
+-				     struct device *dev)
++				     struct device *dev, struct iommu_domain *old)
+ {
+ 	struct vsi_iommu *iommu = dev_iommu_priv_get(dev);
+ 	unsigned long flags;
+@@ -566,7 +566,7 @@
+ EXPORT_SYMBOL_GPL(vsi_iommu_restore_ctx);
+ 
+ static int vsi_iommu_attach_device(struct iommu_domain *domain,
+-				   struct device *dev)
++				   struct device *dev, struct iommu_domain *old)
+ {
+ 	struct vsi_iommu *iommu = dev_iommu_priv_get(dev);
+ 	struct vsi_iommu_domain *vsi_domain = to_vsi_domain(domain);
