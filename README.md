@@ -2,6 +2,8 @@
 
 Armbian (Debian 13 trixie, CLI) for the **Kray-SoM-RKC** board based on the Rockchip RK3566.
 
+**New to the board?** Start with the [quick start guide](docs/quick-start.md): from a released image to a working board in about 15 minutes.
+
 The board is derived from the EmbedFire LubanCat Zero N design: RK3566, 1 GB DDR3L, RK809-5 + TCS4525 PMIC, RTL8211F Gigabit Ethernet, a PCIe 2.0 x1 M.2 slot, HDMI, USB and microSD. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
 
 ## Boards
@@ -89,7 +91,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ```
   The initial password is `1234` and is already expired: the first login asks for it once more and then for a new password, and closes the session; log in again with the new one. The hostname is published over mDNS (avahi); with several boards on one network the next ones become `kray-som-rkc-2.local` and so on. The console login prompt also shows the board's IP. No regular user is created; add one with `adduser` if needed.
 - **Security defaults.** A firewall lets in only SSH, mDNS, ping and DHCP replies (plus port 8080 on the demo image); rpcbind and LLMNR are off and SSH is tightened. To open a port, add a rule to `/etc/nftables.d/`. See [docs/security.md](docs/security.md).
-- Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
+- Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. Use a Silicon Labs CP2104 or a similar Silicon Labs USB-UART adapter: many others do not hold 1500000 baud. HDMI (tty1) also has a login prompt.
 - NPU (vendor images only): install the RKNN runtime once, then run the check:
   ```bash
   sudo kray-get-proprietary rknn
@@ -150,7 +152,7 @@ scripts/build-gst-v4l2codecs.sh            patched GStreamer v4l2codecs .deb for
 scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
 scripts/check-hardening.sh                 checks binaries for stack protector, RELRO, PIE (docs/security.md)
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
-docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
+docs/                                      guides (quick start, NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
