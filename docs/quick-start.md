@@ -9,7 +9,7 @@ From a released image to a working Kray-SoM-RKC in about 15 minutes. Building th
 - Ethernet cable to a network with DHCP; a PC on the same network
 - Optional:
   - HDMI monitor;
-  - USB-UART adapter for the serial console (UART2, 1500000 8N1);
+  - USB-UART adapter for the serial console (UART2, 1500000 8N1): a Silicon Labs CP2104 or a similar Silicon Labs adapter. Many other USB-UART adapters do not hold 1500000 baud, and the console then shows garbage or drops characters;
   - camera module, M.2 NVMe drive or Hailo-8 card;
   - heatsink or fan for long runs under load.
 
@@ -148,4 +148,8 @@ More: [vendor-npu-and-codecs.md](vendor-npu-and-codecs.md) and the [README](../R
 | Camera not found | Check the overlay line with `grep overlays /boot/armbianEnv.txt`, check the cable orientation (with the power off), then follow the checks in [camera.md](camera.md#check) |
 | SoC gets hot | Fit a heatsink: without one the SoC throttles under long NPU or video loads |
 
-To see what the board prints while booting, use the serial console: UART2, 1500000 8N1.
+To see what the board prints while booting, use the serial console: UART2, 1500000 8N1, with a Silicon Labs CP2104 or similar adapter (see [What you need](#1-what-you-need)). On Linux:
+
+```bash
+picocom -b 1500000 /dev/ttyUSB0
+```

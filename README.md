@@ -91,7 +91,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
   ```
   The initial password is `1234` and is already expired: the first login asks for it once more and then for a new password, and closes the session; log in again with the new one. The hostname is published over mDNS (avahi); with several boards on one network the next ones become `kray-som-rkc-2.local` and so on. The console login prompt also shows the board's IP. No regular user is created; add one with `adduser` if needed.
 - **Security defaults.** A firewall lets in only SSH, mDNS, ping and DHCP replies (plus port 8080 on the demo image); rpcbind and LLMNR are off and SSH is tightened. To open a port, add a rule to `/etc/nftables.d/`. See [docs/security.md](docs/security.md).
-- Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. HDMI (tty1) also has a login prompt.
+- Console: UART2, **1500000 8N1**, carrying the kernel log, the initramfs rescue shell and the login prompt. Use a Silicon Labs CP2104 or a similar Silicon Labs USB-UART adapter: many others do not hold 1500000 baud. HDMI (tty1) also has a login prompt.
 - NPU (vendor images only): install the RKNN runtime once, then run the check:
   ```bash
   sudo kray-get-proprietary rknn
