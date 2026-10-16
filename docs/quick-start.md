@@ -36,7 +36,7 @@ xzcat rk3566-os-<version>-trixie-<image>.img.xz | sudo dd of=/dev/sdX bs=4M conv
 
 Replace `/dev/sdX` with the card (check with `lsblk`; the wrong device loses its data).
 
-On Windows or macOS, use balenaEtcher or Rufus. Afterwards do not open or format the card in Explorer: Windows can rewrite the partition table, and the board then does not find its root partition.
+On Windows or macOS, use balenaEtcher. Afterwards do not open or format the card in Explorer: Windows can rewrite the partition table, and the board then does not find its root partition.
 
 For a **LubanCat Zero N** reference board, set its device tree on the card before the first boot (see the [README](../README.md#boards)).
 
