@@ -97,11 +97,13 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 
 # Mainline kernel pinned to a stable release. Armbian v26.5.1 follows the
 # linux-6.18.y branch, and its patches do not always build on the newest
-# release: with 6.18.57 its VeriSilicon IOMMU driver (vsi-iommu) fails on the
-# changed attach_dev signature. Move the tag on when a new release is tested.
+# release. 6.18.57 changed the IOMMU attach_dev callback (it backports
+# fd714986e4e4); userpatches/kernel/archive/rockchip64-6.18/media-0007z-*.patch
+# applies Armbian's fix for its VeriSilicon IOMMU patch (armbian/build
+# db9f6c5120) on top of it. Move the tag on when a new release is tested.
 function post_family_config__kray_som_rkc_current_kernel_pin() {
 	[[ "${BRANCH}" == "current" ]] || return 0
-	declare -g KERNELBRANCH="tag:v6.18.56"
+	declare -g KERNELBRANCH="tag:v6.18.57"
 	display_alert "$BOARD" "Using mainline kernel ${KERNELBRANCH}" "info"
 }
 
