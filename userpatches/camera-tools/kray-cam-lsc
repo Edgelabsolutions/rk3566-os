@@ -164,7 +164,7 @@ def main():
     conf = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False)
     conf.write("ae = 1\ntarget = 0.45\nawb = 0\nwb_red = 1.0\nwb_blue = 1.0\n"
                "gamma = 0\nblack_level_subtraction = 1\nlsc = 0\nccm = 0\n"
-               "denoise = 0\nsharpen = 0\n")
+               "denoise = 0\nsharpen = 0\nbayer_denoise = 0\ntemporal_denoise = 0\n")
     conf.close()
     was_active = subprocess.run(["systemctl", "is-active", "--quiet", "kray-cam-3a"]).returncode == 0
     subprocess.run(["systemctl", "stop", "kray-cam-3a"])

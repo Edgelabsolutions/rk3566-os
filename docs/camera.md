@@ -231,7 +231,7 @@ Instead the vendor image runs `kray-cam-3a.service`, a small replacement for the
 - **auto white balance** (grey world): sets the ISP's red and blue gains so that near-neutral areas come out grey;
 - **lens shading correction**: loads a gain table into the ISP that brightens the corners, which the lens leaves darker (see below);
 - **colour correction**: sets the ISP's colour matrix for the light's colour temperature, so that colours come out full and close to real instead of muted (see below);
-- **noise reduction and sharpening**: sets the ISP's colour and luma noise reduction and its sharpening for the sensor gain (see below).
+- **noise reduction and sharpening**: sets the ISP's noise reduction (Bayer 2D and temporal, colour, luma) and its sharpening for the sensor gain (see below).
 
 It works with any capture program (`v4l2-ctl`, GStreamer, OpenCV, your own); nothing has to be changed there. Settings are in `/etc/kray-cam-3a.conf` (target level, exposure and gain limits, fixed white balance, gamma, lens shading, colour correction, noise reduction); after a change:
 
@@ -240,7 +240,7 @@ sudo systemctl restart kray-cam-3a
 journalctl -u kray-cam-3a -f        # what it does; kray-cam-3a -v prints every step
 ```
 
-What it does not do: the ISP's Bayer-domain noise reduction (2D and temporal) stays off, and there is no autofocus. With `kray-cam-3a` stopped (`sudo systemctl disable --now kray-cam-3a`) the ISP runs on its defaults and the sensor keeps the exposure and gain it is given; set them by hand:
+What it does not do: there is no autofocus. With `kray-cam-3a` stopped (`sudo systemctl disable --now kray-cam-3a`) the ISP runs on its defaults and the sensor keeps the exposure and gain it is given; set them by hand:
 
 ```bash
 MD=$(for m in /dev/media*; do media-ctl -d $m -p 2>/dev/null | grep -q rkisp && echo $m; done | head -1)
@@ -290,20 +290,30 @@ Clipped highlights come out white: after the black level subtraction `kray-cam-3
 
 ### Noise reduction and sharpening
 
-The ISP has a colour noise filter (CNR), a luma noise filter (YNR) and a sharpening filter. Their settings depend on the noise, which grows with the sensor gain: `kray-cam-3a` takes them from `/etc/kray-cam-3a/nr-<sensor>.conf`, which lists the register values for ISO 50 to 12800 (ISO 50 = gain 1), and switches them when auto exposure changes the gain. `kray-cam-3a -v` prints the ISO in use.
+The ISP has noise filters on the raw Bayer data (a 2D filter, BAYNR, and a temporal one, BAY3D, which blends each frame with the previous ones where the picture does not move), a colour noise filter (CNR), a luma noise filter (YNR) and a sharpening filter. Their settings depend on the noise, which grows with the sensor gain: `kray-cam-3a` takes them from `/etc/kray-cam-3a/nr-<sensor>.conf`, which lists the register values for ISO 50 to 12800 (ISO 50 = gain 1), and switches them when auto exposure changes the gain. `kray-cam-3a -v` prints the ISO in use.
 
 The IMX219 table is made from two sources:
 - the filter settings of Rockchip's rkaiq tuning for the OV8858 (also 8 MP with 1.12 um pixels; rkaiq has none for the IMX219; Apache-2.0), at 1.5x the noise reduction and 0.5x the sharpening of that tuning;
-- the IMX219's own noise, measured on Kray-SoM-RKC (`noise-imx219.txt` in the repository): frames of a diffuser on the lens at gains 1 to 48, noise from the difference of two frames. The YNR filter compares the picture against this noise level.
+- the IMX219's own noise, measured on Kray-SoM-RKC (`noise-imx219.txt` in the repository): frames of a diffuser on the lens at gains 1 to 48, noise from the difference of two frames. The YNR filter compares the picture against this noise level. The Bayer filters keep the OV8858's noise curves: they work on the raw data in a log scale, which this measurement (taken on the output) does not cover.
 
 Measured with a table scene at gain 16 (ISO 800), noise from the difference of two frames:
 
 | | luma noise | colour noise |
 |---|---|---|
 | off | 7.2 | 6.9 |
-| on (default) | 4.1 | 1.9 |
+| colour and luma filters | 4.1 | 1.9 |
 
-`denoise = 0` or `sharpen = 0` in `/etc/kray-cam-3a.conf` switch them off. The three filters work as a set in the ISP: enabled one by one they gave a colour cast and stripes, so `kray-cam-3a` keeps all three enabled and switches one off with its bypass bits.
+The Bayer filters on top of that, another scene at gain 16 (luma noise within one frame / between two frames):
+
+| | within a frame | between frames |
+|---|---|---|
+| colour and luma filters | 1.5-1.7 | 2.2-3.3 |
+| + Bayer 2D | 1.3 | 2.9 |
+| + Bayer temporal (default) | 0.74 | 1.26 |
+
+With a hand waved in front of the camera no trails showed beyond the motion blur of the exposure: the temporal filter leaves moving parts of the picture to the 2D filters, so they keep more noise than still ones.
+
+`denoise = 0`, `sharpen = 0`, `bayer_denoise = 0` or `temporal_denoise = 0` in `/etc/kray-cam-3a.conf` switch them off; the temporal filter needs the Bayer 2D one and is set up when the camera starts (it takes an 18 MB frame buffer at 3280x2464). The three filters work as a set in the ISP: enabled one by one they gave a colour cast and stripes, so `kray-cam-3a` keeps all three enabled and switches one off with its bypass bits.
 
 To make a table with other strengths (or for another camera, with its own noise measurement), `scripts/gen-isp21-nr.py` turns an rkaiq ISP21 tuning file into a table; the OV8858 file is `rkaiq/iqfiles/isp21/ov8858_HS5885-BNSM1018-V01_default.json` in https://github.com/JeffyCN/mirrors (branch `rkaiq-2024_04_08`). The header of `nr-imx219.conf` has the command used.
 
@@ -380,4 +390,4 @@ The analogue input to use (the module's CVBS connector is usually AIN1) and brig
 - **Lens focus (Camera Module 3, Arducam 16 and 64 MP) and HDMI input (TC358743)**: drivers, overlays and the EDID service build; not yet tested with hardware.
 - **IMX219 (Raspberry Pi Camera v2)**: tested on Kray-SoM-RKC with the v1.8 vendor image. The sensor is found on I2C1 (`Model ID 0x0219`), linked `imx219 1-0010` → `rockchip-csi2-dphy0` → `rkisp-isp-subdev`, and `rkisp_mainpath` delivers 1920x1080 NV12 at the rates above.
 
-Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219. Lens shading correction: tested with the IMX219 in the 3280x2464 and 1920x1080 modes (on a diffuser: corners from 0.22 to 0.7-0.8 of the centre, colour within 0.96-1.02). Colour correction: tested with the IMX219 under room lamps (about 3500-4200 K); not checked against a colour chart. Noise reduction and sharpening: tested with the IMX219 at gains up to 16 (ISO 800).
+Auto exposure and white balance come from `kray-cam-3a` (see above); tested with the IMX219. Lens shading correction: tested with the IMX219 in the 3280x2464 and 1920x1080 modes (on a diffuser: corners from 0.22 to 0.7-0.8 of the centre, colour within 0.96-1.02). Colour correction: tested with the IMX219 under room lamps (about 3500-4200 K); not checked against a colour chart. Noise reduction and sharpening: tested with the IMX219 at gains up to 16 (ISO 800), the temporal filter also with motion.
