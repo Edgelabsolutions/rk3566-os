@@ -2,6 +2,8 @@
 
 Armbian (Debian 13 trixie, CLI) for the **Kray-SoM-RKC** board based on the Rockchip RK3566.
 
+**New to the board?** Start with the [quick start guide](docs/quick-start.md): from a released image to a working board in about 15 minutes.
+
 The board is derived from the EmbedFire LubanCat Zero N design: RK3566, 1 GB DDR3L, RK809-5 + TCS4525 PMIC, RTL8211F Gigabit Ethernet, a PCIe 2.0 x1 M.2 slot, HDMI, USB and microSD. Armbian, mainline Linux and mainline U-Boot do not support it, so this repository adds it to the official [armbian/build](https://github.com/armbian/build) through `userpatches`.
 
 ## Boards
@@ -150,7 +152,7 @@ scripts/build-gst-v4l2codecs.sh            patched GStreamer v4l2codecs .deb for
 scripts/build-demo.sh                      exhibition demo program + YOLOv8n model for the NPU
 scripts/check-hardening.sh                 checks binaries for stack protector, RELRO, PIE (docs/security.md)
 tools/cryptobench/cryptobench.c            crypto engine vs CPU crypto benchmark (build on the board)
-docs/                                      guides (NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
+docs/                                      guides (quick start, NPU, codecs, crypto, cameras, Hailo, demo image, security, testing)
 userpatches/
   config/boards/kray-som-rkc.csc           Armbian board config
   config/kernel/linux-rk35xx-vendor.config vendor kernel config for rkr7.2 (from Armbian main)
