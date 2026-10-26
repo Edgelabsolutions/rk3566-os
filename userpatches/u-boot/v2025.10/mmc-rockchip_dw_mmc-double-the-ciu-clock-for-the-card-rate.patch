@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Mon, 26 Oct 2026 12:00:00 +0200
+Subject: [PATCH] mmc: rockchip_dw_mmc: double the ciu clock for the card rate
+
+On RK3288 and later SoCs the dw_mmc card interface clock comes from a
+clock generator that divides the ciu clock by 2 (Linux:
+RK3288_CLKGEN_DIV in dw_mmc-rockchip.c). U-Boot set the ciu clock to
+the card rate and put the dw_mmc divider in bypass, so a high speed SD
+card reported at 50 MHz ran at 25 MHz: about 12 MB/s on RK3566.
+
+Ask the clock driver for twice the card rate; if it cannot provide it
+(the 400 kHz identification clock on RK3568), keep the old behaviour.
+
+SPDX-License-Identifier: GPL-2.0
+---
+--- a/drivers/mmc/rockchip_dw_mmc.c
++++ b/drivers/mmc/rockchip_dw_mmc.c
+@@ -48,6 +48,18 @@
+ 	if (host->mmc->selected_mode == MMC_DDR_52 && host->mmc->bus_width == 8)
+ 		freq *= 2;
+ 
++	/*
++	 * The clock generator in front of the card interface divides the
++	 * ciu clock by 2 (RK3288_CLKGEN_DIV in Linux), so ask for twice the
++	 * rate and report the card rate: the dw_mmc divider stays in bypass.
++	 * Without this a "50 MHz" high speed card ran at 25 MHz. Rates the
++	 * clock driver cannot double (the 400 kHz identification clock)
++	 * keep the old behaviour.
++	 */
++	ret = clk_set_rate(&priv->clk, freq * 2);
++	if (ret == freq * 2)
++		return freq;
++
+ 	ret = clk_set_rate(&priv->clk, freq);
+ 	if (ret < 0) {
+ 		debug("%s: err=%d\n", __func__, ret);
