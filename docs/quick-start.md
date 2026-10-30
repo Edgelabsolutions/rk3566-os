@@ -21,9 +21,9 @@ Download the latest release from [Releases](https://github.com/Edgelabsolutions/
 
 | Image | Pick it for |
 |---|---|
-| `…-vendor-6.1.189.img.xz` | **Most uses.** NPU, hardware video encode and decode (MPP), cameras with auto exposure, colour and noise correction |
+| `…-vendor-6.1.190.img.xz` | **Most uses.** NPU, hardware video encode and decode (MPP), cameras with auto exposure, colour and noise correction |
 | `…-current-6.18.x.img.xz` | A mainline kernel, when you need neither the NPU nor cameras. Video decode only |
-| `…-vendor-6.1.189-demo.img.xz` | An exhibition demo: boots straight into people detection on the IMX219 camera on HDMI. See [demo.md](demo.md) |
+| `…-vendor-6.1.190-demo.img.xz` | An exhibition demo: boots straight into people detection on the IMX219 camera on HDMI. See [demo.md](demo.md) |
 
 ## 3. Flash the card
 

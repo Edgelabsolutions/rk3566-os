@@ -169,3 +169,8 @@ Found by compile-testing with the board's vendor-rk35xx config (CONFIG_WERROR=y)
 - Patch verification: `git apply --check` of kernel-stable-6.1.172-to-6.1.189.patch on a clean 5b1fabbf465e worktree succeeds, and the applied tree is identical to merge commit d26aebd6f9f3.
 - BLOCKER for the Armbian vendor build: Armbian's drivers harness (lib/functions/compilation/patch/drivers_network.sh, driver_rtw88) applies patch/misc/rtw88/6.1/001-drivers-net-wireless-realtek-rtw88-upstream-wireless.patch with `patch --batch -N`, and exits on failure. That patch already carries upstream 634fcbcaa406 ("wifi: rtw88: delete timer and free skb queue when unloading"), which v6.1.189 now contains (60ee0f6fea7b). Result: hunk #15 of rtw88/main.c (rtw_core_deinit) fails on the merged tree (it applies fine on the old 6.1.172 tree). The armbian-build patch needs that hunk dropped (the later hunk in the same file that turns timer_delete_sync() into del_timer_sync() still applies), or driver_rtw88 must be skipped/overridden. hack/003 and hack/004 still apply.
 - Build time: ~16.5 min for the first full `-j8` build (plus incremental rebuilds after the API fixes).
+
+# Follow-up: 6.1.190
+
+- `userpatches/kernel/rk35xx-vendor-6.1/9001-linux-stable-6.1.189-to-6.1.190.patch` is `git diff v6.1.189 v6.1.190` (4 commits, 10 files: networking code and the Makefile). It applies on top of the 6.1.189 merge without conflicts or fuzz.
+- Main reason: 89b5b1eb7 "ipv4: free inet_opt and ireq_opt after an RCU grace period" (CVE-2026-98432, IPv4 TCP use-after-free).

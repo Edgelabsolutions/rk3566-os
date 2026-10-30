@@ -76,9 +76,10 @@ function pre_config_uboot_target__kray_som_rkc_pin_rkbin_blobs() {
 }
 
 # Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
-# brought up to upstream stable 6.1.189 by
+# brought up to upstream stable 6.1.190 by
 # userpatches/kernel/rk35xx-vendor-6.1/9000-linux-stable-6.1.172-to-6.1.189.patch
-# (merge and conflict resolutions: docs/kernel-stable-6.1.189-merge.md),
+# (merge and conflict resolutions: docs/kernel-stable-6.1.189-merge.md) and
+# 9001-linux-stable-6.1.189-to-6.1.190.patch (applies without conflicts),
 # as in Armbian main (armbian/build 81e8624). The matching kernel config is in
 # userpatches/config/kernel/linux-rk35xx-vendor.config. The Unisoc uwe5622 WiFi
 # driver that Armbian v26.5.1 injects does not link against rkr7.2 (the board
