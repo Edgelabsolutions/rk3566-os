@@ -172,7 +172,7 @@ userpatches/
 
 ## Technical notes
 
-- **U-Boot.** Mainline U-Boot 2025.10 with its own board (`kray-som-rkc-rk3566_defconfig`) whose DTS describes the RK809. U-Boot enables the `regulator-boot-on` rails, `vdd_npu` among them. Without that the vendor kernel panics with `panic_on_set_idle` while powering up the NPU power domain.
+- **U-Boot.** Mainline U-Boot 2025.10 with its own board (`kray-som-rkc-rk3566_defconfig`) whose DTS describes the RK809. U-Boot enables the `regulator-boot-on` rails, `vdd_npu` among them. Without that the vendor kernel panics with `panic_on_set_idle` while powering up the NPU power domain. A U-Boot patch also runs the SD card at its real high speed clock: the Rockchip dw_mmc clock generator halves the ciu clock, so U-Boot asks for twice the card rate (without it a 50 MHz card ran at 25 MHz and the kernel loaded twice as slowly).
 - **DDR.** `rk3566_ddr_1056MHz_v1.21.bin`, BL31 `rk3568_bl31_v1.44.elf`.
 - **microSD.** UHS-I cards run in SDR104 at 150 MHz. The SD pins run at drive strength level 5: with the SoC default (level 2) SDR104 tuning fails (`All phases bad`). If tuning fails anyway, the kernel falls back to High Speed (50 MHz).
 - **Console.** The vendor DTS disables the FIQ debugger and hands UART2 to the 8250 driver (`ttyS2`), so the console accepts input.
