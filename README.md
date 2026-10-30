@@ -27,7 +27,7 @@ Both device trees share `rk3566-kray-som-rkc.dtsi`; the board files only add the
 
 Two kernel branches are supported:
 
-- **vendor 6.1** (Rockchip BSP, SDK release rkr7.2, 6.1.172), the default, and the only one with the NPU;
+- **vendor 6.1** (Rockchip BSP, SDK release rkr7.2, 6.1.172, brought up to upstream stable 6.1.190), the default, and the only one with the NPU;
 - **current 6.18** (mainline), for setups that do not need the NPU.
 
 | Component | vendor 6.1 | current 6.18 |
