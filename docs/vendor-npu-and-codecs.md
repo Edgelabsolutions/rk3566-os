@@ -11,6 +11,7 @@ This guide covers the **vendor** image (Rockchip BSP kernel 6.1). The NPU and th
 - [Hardware video codecs](#hardware-video-codecs)
   - [What the hardware supports](#what-the-hardware-supports)
   - [FFmpeg](#ffmpeg)
+  - [FFmpeg libraries in your application](#ffmpeg-libraries-in-your-application)
   - [GStreamer](#gstreamer)
   - [MPP test tools](#mpp-test-tools)
   - [Troubleshooting](#troubleshooting)
@@ -148,6 +149,7 @@ The vendor image ships the Rockchip MPP stack, built by `scripts/build-multimedi
 | `rockchip-mpp` | `librockchip_mpp`, headers, `mpi_dec_test`, `mpi_enc_test`, ... |
 | `librga-rockchip` | `librga` (RGA 2D engine: scaling, colour conversion, rotation) |
 | `ffmpeg-rockchip` | `ffmpeg` and `ffprobe` in `/usr/local/bin` with `*_rkmpp` codecs and RGA filters |
+| `ffmpeg-rockchip-dev` | the same FFmpeg as shared libraries (`libavcodec`, `libavformat`, ...), headers and pkg-config files in `/opt/ffmpeg-rockchip`, for your own applications |
 | `gstreamer1.0-rockchip` | GStreamer elements `mppvideodec`, `mpph264enc`, `mpph265enc`, `mppjpegenc`, `mppjpegdec` |
 
 ### What the hardware supports
@@ -216,6 +218,30 @@ Useful encoder options (`h264_rkmpp`, `hevc_rkmpp`):
 | `-coder` (H.264) | `cabac` (default), `cavlc` |
 
 RGA filters: `scale_rkrga` (resize / format conversion), `vpp_rkrga` (scale, crop, transpose), `overlay_rkrga` (compose two streams). See `ffmpeg -h filter=scale_rkrga`.
+
+### FFmpeg libraries in your application
+
+An application that already uses `libavcodec` / `libavformat` with a software encoder can use the hardware one through `/opt/ffmpeg-rockchip`:
+
+- **Version:** [ffmpeg-rockchip](https://github.com/nyanmisaka/ffmpeg-rockchip) on FFmpeg 8.1 (`libavcodec.so.62`). The API is upstream FFmpeg 8.1; the fork adds codecs, the `AV_HWDEVICE_TYPE_RKMPP` device type and the RGA filters.
+- **Licence:** the libraries are built without `--enable-gpl` and are LGPL-3.0, so closed applications may link them dynamically. The `ffmpeg` program in `/usr/local/bin` is GPL.
+- **Debian's FFmpeg:** Debian's `libavcodec-dev` is FFmpeg 7.1 (`libavcodec.so.61`) without Rockchip support. Both can be installed together, but build against one of them only: headers from one and libraries from the other do not match.
+
+Build with pkg-config. The libraries are on the loader path (`/etc/ld.so.conf.d/ffmpeg-rockchip.conf`), so no rpath is needed:
+
+```bash
+export PKG_CONFIG_PATH=/opt/ffmpeg-rockchip/lib/pkgconfig
+gcc app.c -o app $(pkg-config --cflags --libs libavformat libavcodec libavutil)
+```
+
+What changes in the code:
+
+- **Encoder:** `avcodec_find_encoder_by_name("h264_rkmpp")` (or `hevc_rkmpp`, `mjpeg_rkmpp`) instead of `libx264`.
+- **Frames:** `AV_PIX_FMT_NV12` or `YUV420P` are the simplest. The encoder also takes `YUYV422`, `UYVY422`, `RGB24`, `BGR24`, `RGBA`, `BGRA` and converts in hardware. Width and height must be even.
+- **Settings:** `bit_rate`, `gop_size`, `profile` and `level` work as usual. Private options through `av_opt_set(ctx->priv_data, ...)`: `rc_mode` (`VBR`, `CBR`, `CQP`, `AVBR`), `qp_init`, `qp_min`, `qp_max`, `qp_min_i`, `qp_max_i`, `coder` (`cavlc`, `cabac`), `8x8dct`, `intra_refresh`. All of them: `ffmpeg -h encoder=h264_rkmpp`.
+- **Copies:** software frames are copied into MPP buffers. Frames already in DMA buffers (from a `*_rkmpp` decoder or an RGA filter) go in as `AV_PIX_FMT_DRM_PRIME` through `hw_frames_ctx`, without a copy.
+
+A complete example that encodes 300 frames of 1080p: [examples/rkmpp-encode.c](examples/rkmpp-encode.c).
 
 ### GStreamer
 

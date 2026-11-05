@@ -102,7 +102,7 @@ xzcat armbian-build/output/images/Armbian-*_Kray-som-rkc_trixie_vendor_*.img.xz 
 
 ### Hardware video codecs
 
-**vendor** images ship the Rockchip MPP stack, cross-compiled by `scripts/build-multimedia.sh` into `userpatches/multimedia/*.deb` from pinned sources: MPP and RGA from [nyanmisaka/mpp](https://github.com/nyanmisaka/mpp) / [rk-mirrors](https://github.com/nyanmisaka/rk-mirrors) (`jellyfin-*` branches), [ffmpeg-rockchip](https://github.com/nyanmisaka/ffmpeg-rockchip) and [gstreamer-rockchip](https://github.com/JeffyCN/mirrors/tree/gstreamer-rockchip).
+**vendor** images ship the Rockchip MPP stack, cross-compiled by `scripts/build-multimedia.sh` into `userpatches/multimedia/*.deb` from pinned sources: MPP and RGA from [nyanmisaka/mpp](https://github.com/nyanmisaka/mpp) / [rk-mirrors](https://github.com/nyanmisaka/rk-mirrors) (`jellyfin-*` branches), [ffmpeg-rockchip](https://github.com/nyanmisaka/ffmpeg-rockchip) (also as LGPL shared libraries with headers in `/opt/ffmpeg-rockchip`) and [gstreamer-rockchip](https://github.com/JeffyCN/mirrors/tree/gstreamer-rockchip).
 
 | Package | Contents |
 |---|---|
