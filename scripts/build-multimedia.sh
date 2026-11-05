@@ -5,6 +5,8 @@
 #   rockchip-mpp          librockchip_mpp + mpi_* test tools + headers
 #   librga-rockchip       librga (RGA 2D engine) + headers
 #   ffmpeg-rockchip       static ffmpeg/ffprobe with *_rkmpp codecs and RGA filters
+#   ffmpeg-rockchip-dev   the same FFmpeg as shared LGPL libraries + headers in
+#                         /opt/ffmpeg-rockchip, for applications that use libav*
 #   gstreamer1.0-rockchip GStreamer MPP/RGA plugins (mppvideodec, mpph264enc, ...)
 #
 # Builds run against an arm64 Debian trixie sysroot created with mmdebstrap,
@@ -150,6 +152,40 @@ build_ffmpeg() {
 	"${TRIPLET}-strip" "${STAGE}/ffmpeg/usr/local/bin/"*
 }
 
+# Shared libav* libraries and headers for applications. Built without
+# --enable-gpl: rkmpp and rkrga only need --enable-version3, so the libraries
+# are LGPL-3.0 and may be linked by closed applications. They live in their own
+# prefix; their sonames (libavcodec.so.62, ...) differ from Debian's FFmpeg 7.1,
+# so both can be installed together.
+FFMPEG_DEV_PREFIX=/opt/ffmpeg-rockchip
+build_ffmpeg_dev() {
+	log "Building ffmpeg-rockchip shared libraries"
+	local b="${WORK}/build/ffmpeg-dev" d="${STAGE}/ffmpeg-dev"
+	# The hardening flags are for executables: -fPIE/-pie become -fPIC here.
+	local cflags="${KRAY_HARDEN_CFLAGS/-fPIE/-fPIC}" ldflags="${KRAY_HARDEN_LDFLAGS/-pie /}"
+	mkdir -p "${b}"
+	(cd "${b}" && "${WORK}/src/ffmpeg/configure" \
+		--prefix="${FFMPEG_DEV_PREFIX}" --enable-cross-compile --cross-prefix="${TRIPLET}-" \
+		--arch=aarch64 --target-os=linux --sysroot="${SYSROOT}" --pkg-config=pkg-config \
+		--enable-version3 --enable-libdrm --enable-rkmpp --enable-rkrga \
+		--enable-shared --disable-static --disable-programs --disable-doc --disable-debug \
+		--disable-libxcb \
+		--extra-cflags="${cflags}" --extra-ldflags="${ldflags}" >/dev/null)
+	make -C "${b}" -j "${JOBS}" >/dev/null
+	rm -rf "${d}"
+	make -C "${b}" install DESTDIR="${d}" >/dev/null
+	rm -rf "${d}${FFMPEG_DEV_PREFIX}/share"
+	# Libs.private would point at the build sysroot; the libraries are on the
+	# default search path of the board.
+	sed -i "s| -L${SYSROOT}/usr/${LIBDIR}||g" "${d}${FFMPEG_DEV_PREFIX}"/lib/pkgconfig/*.pc
+	"${TRIPLET}-strip" --strip-unneeded "${d}${FFMPEG_DEV_PREFIX}"/lib/*.so.*.*
+	mkdir -p "${d}/etc/ld.so.conf.d" "${d}/DEBIAN"
+	echo "${FFMPEG_DEV_PREFIX}/lib" > "${d}/etc/ld.so.conf.d/ffmpeg-rockchip.conf"
+	printf '#!/bin/sh\nset -e\nldconfig\n' > "${d}/DEBIAN/postinst"
+	printf '#!/bin/sh\nset -e\n[ "$1" = remove ] && ldconfig || true\n' > "${d}/DEBIAN/postrm"
+	chmod 0755 "${d}/DEBIAN/postinst" "${d}/DEBIAN/postrm"
+}
+
 build_gst() {
 	log "Building gstreamer-rockchip"
 	local b="${WORK}/build/gst"
@@ -191,6 +227,7 @@ main() {
 	build_mpp
 	build_rga
 	build_ffmpeg
+	build_ffmpeg_dev
 	build_gst
 
 	rm -f "${OUT}"/*.deb
@@ -200,6 +237,8 @@ main() {
 		"Rockchip RGA 2D graphics acceleration library"
 	make_deb ffmpeg-rockchip "${STAGE}/ffmpeg" "rockchip-mpp, librga-rockchip, libdrm2" \
 		"FFmpeg with Rockchip MPP hardware codecs and RGA filters (in /usr/local/bin)"
+	make_deb ffmpeg-rockchip-dev "${STAGE}/ffmpeg-dev" "libc6, liblzma5, zlib1g, libdrm2, rockchip-mpp, librga-rockchip" \
+		"FFmpeg libraries (LGPL) with Rockchip MPP codecs and headers in ${FFMPEG_DEV_PREFIX}"
 	make_deb gstreamer1.0-rockchip "${STAGE}/gst" \
 		"rockchip-mpp, librga-rockchip, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0" \
 		"GStreamer plugins for Rockchip MPP and RGA"
