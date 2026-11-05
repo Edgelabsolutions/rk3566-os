@@ -2,8 +2,8 @@
 // Encode 300 synthetic 1080p NV12 frames with the hardware H.264 encoder
 // through libavcodec and write a raw H.264 stream.
 //
-//   gcc rkmpp-encode.c -o rkmpp-encode \
-//       $(PKG_CONFIG_PATH=/opt/ffmpeg-rockchip/lib/pkgconfig pkg-config --cflags --libs libavcodec libavutil)
+//   export PKG_CONFIG_PATH=/opt/ffmpeg-rockchip/lib/pkgconfig
+//   gcc -O2 rkmpp-encode.c -o rkmpp-encode $(pkg-config --cflags --libs libavcodec libavutil)
 //   ./rkmpp-encode out.h264
 #include <stdio.h>
 #include <libavcodec/avcodec.h>
