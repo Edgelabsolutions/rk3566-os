@@ -102,10 +102,11 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 # release. 6.18.57 changed the IOMMU attach_dev callback (it backports
 # fd714986e4e4); userpatches/kernel/archive/rockchip64-6.18/media-0007z-*.patch
 # applies Armbian's fix for its VeriSilicon IOMMU patch (armbian/build
-# db9f6c5120) on top of it. Move the tag on when a new release is tested.
+# db9f6c5120) on top of it. Move the tag on when a new release is tested
+# (6.18.62: security update).
 function post_family_config__kray_som_rkc_current_kernel_pin() {
 	[[ "${BRANCH}" == "current" ]] || return 0
-	declare -g KERNELBRANCH="tag:v6.18.57"
+	declare -g KERNELBRANCH="tag:v6.18.62"
 	display_alert "$BOARD" "Using mainline kernel ${KERNELBRANCH}" "info"
 }
 
