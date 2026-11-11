@@ -76,10 +76,11 @@ function pre_config_uboot_target__kray_som_rkc_pin_rkbin_blobs() {
 }
 
 # Vendor kernel from the Rockchip SDK rkr7.2 release (6.1.172) instead of rkr5.1,
-# brought up to upstream stable 6.1.190 by
+# brought up to upstream stable 6.1.192 by
 # userpatches/kernel/rk35xx-vendor-6.1/9000-linux-stable-6.1.172-to-6.1.189.patch
 # (merge and conflict resolutions: docs/kernel-stable-6.1.189-merge.md) and
-# 9001-linux-stable-6.1.189-to-6.1.190.patch (applies without conflicts),
+# 9001-linux-stable-6.1.189-to-6.1.190.patch (applies without conflicts) and
+# 9002-linux-stable-6.1.190-to-6.1.192.patch (merge notes in the same document),
 # as in Armbian main (armbian/build 81e8624). The matching kernel config is in
 # userpatches/config/kernel/linux-rk35xx-vendor.config. The Unisoc uwe5622 WiFi
 # driver that Armbian v26.5.1 injects does not link against rkr7.2 (the board
@@ -101,10 +102,11 @@ function post_family_config__kray_som_rkc_vendor_rkr72() {
 # release. 6.18.57 changed the IOMMU attach_dev callback (it backports
 # fd714986e4e4); userpatches/kernel/archive/rockchip64-6.18/media-0007z-*.patch
 # applies Armbian's fix for its VeriSilicon IOMMU patch (armbian/build
-# db9f6c5120) on top of it. Move the tag on when a new release is tested.
+# db9f6c5120) on top of it. Move the tag on when a new release is tested
+# (6.18.62: security update).
 function post_family_config__kray_som_rkc_current_kernel_pin() {
 	[[ "${BRANCH}" == "current" ]] || return 0
-	declare -g KERNELBRANCH="tag:v6.18.57"
+	declare -g KERNELBRANCH="tag:v6.18.62"
 	display_alert "$BOARD" "Using mainline kernel ${KERNELBRANCH}" "info"
 }
 

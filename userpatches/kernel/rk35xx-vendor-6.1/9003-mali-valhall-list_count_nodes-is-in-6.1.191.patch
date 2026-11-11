@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Olexandr Tyshchenko <o.tyshchenko@eslua.com>
+Date: Tue, 10 Nov 2026 12:00:00 +0200
+Subject: [PATCH] mali valhall: list_count_nodes() is in 6.1.191 and later
+
+Linux 6.1.191 backported list_count_nodes() to include/linux/list.h.
+The Mali Valhall compatibility header defined its own copy for every
+kernel before 6.3, which no longer builds.
+---
+diff --git a/include/linux/version_compat_defs_for_valhall.h b/include/linux/version_compat_defs_for_valhall.h
+index 685067ae8..51ade45c3 100644
+--- a/include/linux/version_compat_defs_for_valhall.h
++++ b/include/linux/version_compat_defs_for_valhall.h
+@@ -619,7 +619,8 @@ static inline void kbase_lockdep_assert_not_held(struct mutex *lock)
+ #endif
+ }
+ 
+-#if KERNEL_VERSION(6, 3, 0) > LINUX_VERSION_CODE
++#if KERNEL_VERSION(6, 1, 191) > LINUX_VERSION_CODE || \
++	(KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE && KERNEL_VERSION(6, 3, 0) > LINUX_VERSION_CODE)
+ static inline size_t list_count_nodes(struct list_head *head)
+ {
+ 	struct list_head *pos;
+-- 
+2.47.3

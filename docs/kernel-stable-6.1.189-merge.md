@@ -174,3 +174,28 @@ Found by compile-testing with the board's vendor-rk35xx config (CONFIG_WERROR=y)
 
 - `userpatches/kernel/rk35xx-vendor-6.1/9001-linux-stable-6.1.189-to-6.1.190.patch` is `git diff v6.1.189 v6.1.190` (4 commits, 10 files: networking code and the Makefile). It applies on top of the 6.1.189 merge without conflicts or fuzz.
 - Main reason: 89b5b1eb7 "ipv4: free inet_opt and ireq_opt after an RCU grace period" (CVE-2026-98432, IPv4 TCP use-after-free).
+
+# Follow-up: 6.1.191 and 6.1.192
+
+`userpatches/kernel/rk35xx-vendor-6.1/9002-linux-stable-6.1.190-to-6.1.192.patch` is the result of a three-way merge of `v6.1.190..v6.1.192` (about 1,880 commits, 1,895 files) into the tree as built for v1.28 (rkr7.2 + Armbian patches + 9000 + 9001). Main reason: about 670 CVE fixes in compiled code (kernel CNA data, 2026-11-07).
+
+Left out (the Rockchip tree already has a newer version):
+
+- 16b3d12f5 "drm/sched: Use struct for drm_sched_init() params": rkr7.2 already carries the later DRM scheduler with `struct drm_sched_init_args` (`submit_wq`, `num_rqs`, credits); the stable backport of the older form conflicted in 7 files.
+- 20ea0ae8e "drm/msm: Only fini scheduler after successful init": the fix that 16b3d12f5 was a stable dependency of. MSM is not built for this board.
+
+Conflicts resolved by hand:
+
+- `drivers/dma-buf/dma-heap.c` (1953ef8d1, fd published only after `copy_to_user()` succeeds): upstream allocation path; Rockchip's exported `dma_heap_find()` / `dma_heap_buffer_alloc()` kept, their unused fd helper dropped. Upstream moved `copy_to_user()` into the ALLOC case, so the Rockchip `DMA_HEAP_IOCTL_GET_PHYS` case got its own `copy_to_user()` back. Rockchip's separate `rk_heaps/rk-dma-heap.c` has the same fd leak and is not covered by this fix.
+- `drivers/gpu/drm/panfrost/panfrost_mmu.c` (f959d043b, fault path error handling): this tree's panfrost locks with `dma_resv`; the error gotos go to `err_unlock` (as in the mainline version of the fix), not `err_bo`, which the automatic merge produced and which would have left the reservation locked.
+- `drivers/hwmon/pwm-fan.c` (7743183d8, stop the RPM timer before freeing tach data): Rockchip thermal notifier functions and the new `pwm_fan_timer_cleanup()` both kept.
+- `drivers/soc/rockchip/pm_domains.c` (27030c8a3, subdomain errors propagated): Rockchip `is_ignore_pwr` logic kept, upstream error check added.
+- `drivers/usb/dwc3/core.c`, `core.h` (b214f0b11 vbus draw work, 86b9c867f IRQ storm): Rockchip `dwc3_get_clocks()` and `DWC3_ISOC_MAX_RETRIES 50` kept, upstream `dwc3_vbus_draw_work()` and `DWC3_ERR_RECOVERY_MAX` added.
+- `drivers/spi/spi-rockchip.c` (7a27d8dd9): the tree already has the fix with the newer `spi_get_csgpiod()` API; ours kept.
+- `drivers/gpu/drm/rockchip/rockchip_drm_vop2.c` (93857359a): the fix is for the upstream VOP2 driver; the Rockchip VOP2 driver is a different implementation, ours kept.
+- `drivers/mtd/*`: Rockchip carried the same upstream MTD refcount series as 6.1.191; after taking upstream, `mtdcore.c`, `mtdcore.h`, `mtdpart.c` and `include/linux/mtd/mtd.h` are identical to v6.1.192.
+
+Separate patches on top of 9002:
+
+- `9003-mali-valhall-list_count_nodes-is-in-6.1.191.patch`: 6.1.191 added `list_count_nodes()` to `<linux/list.h>`; the Mali Valhall compat header defined its own copy for every 6.1 kernel and failed to build. Its guard now stops at 6.1.191.
+- `9004-net-stmmac-do-not-clear-xstats-in-stmmac_open.patch`: the 6.1.191 backport of upstream 38cc3c6dcc09 ("net: stmmac: protect updates of 64-bit statistics counters") moved the interrupt counters to per-CPU `xstats.pcpu_stats`, allocated at probe. The 6.1.y `stmmac_open()` still clears all of `xstats`, which sets that pointer to NULL, and the first Ethernet DMA interrupt after the interface comes up panics in `u64_stats_inc()` (seen on the board at boot). Mainline removed this `memset()` in 133466c3bbe1; the patch does the same. Plain v6.1.191 and v6.1.192 have the same bug, so check for an upstream fix before dropping 9004 on the next stable update.

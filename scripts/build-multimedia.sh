@@ -27,7 +27,7 @@ JOBS="$(nproc)"
 # Pinned sources: repository, branch, commit.
 MPP_REPO=https://github.com/nyanmisaka/mpp;                MPP_BRANCH=jellyfin-mpp;        MPP_COMMIT=a9380ef333102ac318628f83b5f7a460d377749e
 RGA_REPO=https://github.com/nyanmisaka/rk-mirrors;         RGA_BRANCH=jellyfin-rga;        RGA_COMMIT=1d330cc28551943bed3380261a5a9c6fbd58ff53
-FFMPEG_REPO=https://github.com/nyanmisaka/ffmpeg-rockchip; FFMPEG_BRANCH=master;           FFMPEG_COMMIT=d90e3a1c18d7929383cf88c1b3da2e2d1c966cbf
+FFMPEG_REPO=https://github.com/nyanmisaka/ffmpeg-rockchip; FFMPEG_BRANCH=8.1;              FFMPEG_COMMIT=b187bf527644cb7b1ee924a019bfd24602da67eb
 GST_REPO=https://github.com/JeffyCN/mirrors;               GST_BRANCH=gstreamer-rockchip;  GST_COMMIT=a0d45af504099b4b82f3d3377019a63d357e7cef
 
 PKG_VERSION="${PKG_VERSION:-1.0~kray1}"
