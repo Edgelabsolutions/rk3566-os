@@ -194,3 +194,8 @@ Conflicts resolved by hand:
 - `drivers/spi/spi-rockchip.c` (7a27d8dd9): the tree already has the fix with the newer `spi_get_csgpiod()` API; ours kept.
 - `drivers/gpu/drm/rockchip/rockchip_drm_vop2.c` (93857359a): the fix is for the upstream VOP2 driver; the Rockchip VOP2 driver is a different implementation, ours kept.
 - `drivers/mtd/*`: Rockchip carried the same upstream MTD refcount series as 6.1.191; after taking upstream, `mtdcore.c`, `mtdcore.h`, `mtdpart.c` and `include/linux/mtd/mtd.h` are identical to v6.1.192.
+
+Separate patches on top of 9002:
+
+- `9003-mali-valhall-list_count_nodes-is-in-6.1.191.patch`: 6.1.191 added `list_count_nodes()` to `<linux/list.h>`; the Mali Valhall compat header defined its own copy for every 6.1 kernel and failed to build. Its guard now stops at 6.1.191.
+- `9004-net-stmmac-do-not-clear-xstats-in-stmmac_open.patch`: the 6.1.191 backport of upstream 38cc3c6dcc09 ("net: stmmac: protect updates of 64-bit statistics counters") moved the interrupt counters to per-CPU `xstats.pcpu_stats`, allocated at probe. The 6.1.y `stmmac_open()` still clears all of `xstats`, which sets that pointer to NULL, and the first Ethernet DMA interrupt after the interface comes up panics in `u64_stats_inc()` (seen on the board at boot). Mainline removed this `memset()` in 133466c3bbe1; the patch does the same. Plain v6.1.191 and v6.1.192 have the same bug, so check for an upstream fix before dropping 9004 on the next stable update.
