@@ -199,3 +199,16 @@ Separate patches on top of 9002:
 
 - `9003-mali-valhall-list_count_nodes-is-in-6.1.191.patch`: 6.1.191 added `list_count_nodes()` to `<linux/list.h>`; the Mali Valhall compat header defined its own copy for every 6.1 kernel and failed to build. Its guard now stops at 6.1.191.
 - `9004-net-stmmac-do-not-clear-xstats-in-stmmac_open.patch`: the 6.1.191 backport of upstream 38cc3c6dcc09 ("net: stmmac: protect updates of 64-bit statistics counters") moved the interrupt counters to per-CPU `xstats.pcpu_stats`, allocated at probe. The 6.1.y `stmmac_open()` still clears all of `xstats`, which sets that pointer to NULL, and the first Ethernet DMA interrupt after the interface comes up panics in `u64_stats_inc()` (seen on the board at boot). Mainline removed this `memset()` in 133466c3bbe1; the patch does the same. Plain v6.1.191 and v6.1.192 have the same bug, so check for an upstream fix before dropping 9004 on the next stable update.
+- `9005-ext4-fix-NULL-folio-dereference-in-mballoc-on-6.1.y.patch`: 6.1.191 backported the ext4 mballoc folio conversion ("ext4: convert bd_bitmap_page to bd_bitmap_folio", "ext4: convert bd_buddy_page to bd_buddy_folio") with the `IS_ERR()` checks of newer kernels, but in 6.1 `__filemap_get_folio()` returns NULL, not an error pointer. When the ext4 buddy cache is evicted under memory pressure, the next block allocation dereferences NULL in `ext4_mb_load_buddy_gfp()`. A process writing a file then dies with SIGSEGV (seen as random segmentation faults in `apt`, `cmake`, `ld` on v1.29), and writeback in a kworker oopses the kernel. The patch checks for NULL and returns `-ENOMEM`, like the 6.1.y fix posted to linux-ext4 (lore: 20261102-ext4-ntfs3-null-folio-v1-1-4fd91ee23a4a@elliotjb.com). Plain v6.1.191 and v6.1.192 have the bug; drop 9005 when a 6.1.y release includes that fix.
+
+Lesson from 9004 and 9005: stable 6.1.y backports of code written for newer kernels can rely on newer API behaviour. Before a release, run the board under memory pressure as well, for example the ext4 reproducer below (write files while dropping the page cache), not only boot and network checks.
+
+```sh
+# ext4 mballoc reproducer: on 6.1.191/192 without 9005 it oopses within a few minutes
+end=$((SECONDS+300)); D=/root/ext4-repro; mkdir -p $D
+( while [ $SECONDS -lt $end ]; do echo 3 > /proc/sys/vm/drop_caches; sleep 0.2; done ) &
+for w in 1 2 3 4; do ( i=0; while [ $SECONDS -lt $end ]; do
+  dd if=/dev/zero of=$D/f$w-$i bs=64k count=16 conv=fsync status=none
+  rm -f $D/f$w-$((i-20)); i=$((i+1)); done ) & done
+wait; rm -rf $D; dmesg | grep -cE 'Oops|Unable to handle'
+```
